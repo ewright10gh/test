@@ -1,82 +1,106 @@
+# ============================================
+# PREDICT ELN FAVOURABLE STATUS IN TARGET
+# ============================================
+
+import os
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from joblib import load
-import os
 
-# =========================
+# ============================================
 # PATHS
-# =========================
-X_TARGET_PATH = r"C:\Users\mba22ew\test\cleaned\X_target.npy"
-MODEL_PATH  = r"C:\Users\mba22ew\test\models\ridge_eln_model.joblib"
-SCALER_PATH = r"C:\Users\mba22ew\test\models\ridge_scaler.joblib"
-OUTPUT_PATH = r"C:\Users\mba22ew\test\results\target_eln_predictions.csv"
-EXPR_TARGET_PATH = r"C:\Users\mba22ew\test\cleaned\target_cleaned_expression.csv"  # DataFrame with gene names
+# ============================================
 
-# =========================
+BASE = r"C:\Users\mba22ew\test"
+
+X_TARGET_PATH = os.path.join(BASE, "cleaned", "X_target.npy")
+TARGET_EXPR_PATH = os.path.join(BASE, "cleaned", "target_cleaned_expression.csv")
+
+MODEL_PATH = os.path.join(BASE, "models", "ridge_eln_model.joblib")
+
+OUTDIR = os.path.join(BASE, "results")
+os.makedirs(OUTDIR, exist_ok=True)
+
+# ============================================
 # LOAD DATA
-# =========================
-print("Loading TARGET expression matrix...")
+# ============================================
+
+print("Loading TARGET matrix...")
 X_target = np.load(X_TARGET_PATH)
-expr_target = pd.read_csv(EXPR_TARGET_PATH, index_col=0)  # For gene-level analysis
-genes = expr_target.columns
-samples = expr_target.index
 
-print("Loading Ridge model + scaler...")
-model  = load(MODEL_PATH)
-scaler = load(SCALER_PATH)
+print("Loading TARGET expression for sample IDs...")
+target_expr = pd.read_csv(TARGET_EXPR_PATH, index_col=0)
+sample_ids = target_expr.index
 
-# =========================
-# SCALE
-# =========================
-X_target_scaled = scaler.transform(X_target)
+print("Loading trained model...")
+model = load(MODEL_PATH)
 
-# =========================
+print("TARGET shape:", X_target.shape)
+
+# ============================================
 # PREDICT
-# =========================
+# ============================================
+
 print("Predicting ELN favourable status...")
-probs = model.predict_proba(X_target_scaled)[:, 1]
-preds = (probs >= 0.5).astype(int)
+
+prob = model.predict_proba(X_target)[:, 1]
+pred = (prob >= 0.5).astype(int)
 
 results = pd.DataFrame({
-    "ELN_favourable_probability": probs,
-    "ELN_predicted_class": preds
-}, index=samples)
+    "ELN_favourable_probability": prob,
+    "ELN_predicted_class": pred
+}, index=sample_ids)
 
-# =========================
-# SAVE PREDICTIONS
-# =========================
-os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-results.to_csv(OUTPUT_PATH)
-print("Predictions saved ✅")
+# ============================================
+# HIGH-CONFIDENCE CALLS
+# ============================================
+
+high_conf_fav = results[results["ELN_favourable_probability"] >= 0.6]
+high_conf_adv = results[results["ELN_favourable_probability"] <= 0.3]
+
+print("\nPrediction counts:")
 print(results["ELN_predicted_class"].value_counts())
 
-# =========================
-# ANALYZE TOP PREDICTIVE GENES
-# =========================
-print("\nAnalyzing gene expression patterns for predicted classes...")
+print("\nHigh-confidence favourable:", len(high_conf_fav))
+print("High-confidence adverse:", len(high_conf_adv))
 
-# Load top 20 genes from Ridge model
-feature_importances_path = r"C:\Users\mba22ew\test\cleaned\ridge_feature_importance.csv"
-top_genes = pd.read_csv(feature_importances_path, index_col=0).head(20).index.tolist()
+# ============================================
+# PROBABILITY DIAGNOSTICS
+# ============================================
 
-# Include HOXA cluster explicitly if not in top 20
-hoxa_genes = [g for g in genes if g.startswith("HOXA")]
-genes_to_check = list(set(top_genes + hoxa_genes))
+print("\nProbability summary:")
+print(results["ELN_favourable_probability"].describe())
 
-expr_subset = expr_target[genes_to_check]
+# ============================================
+# SAVE TABLES
+# ============================================
 
-# Split expression by predicted class
-expr_fav = expr_subset.loc[results["ELN_predicted_class"] == 1]
-expr_nonfav = expr_subset.loc[results["ELN_predicted_class"] == 0]
+results.to_csv(os.path.join(OUTDIR, "TARGET_ELN_predictions.csv"))
+high_conf_fav.to_csv(os.path.join(OUTDIR, "TARGET_high_conf_favourable.csv"))
+high_conf_adv.to_csv(os.path.join(OUTDIR, "TARGET_high_conf_adverse.csv"))
 
-# Summary statistics
-summary = pd.DataFrame({
-    "Favorable_mean": expr_fav.mean(),
-    "NonFavorable_mean": expr_nonfav.mean(),
-    "Favorable_median": expr_fav.median(),
-    "NonFavorable_median": expr_nonfav.median()
-}).sort_values("Favorable_mean", ascending=False)
+# ============================================
+# PLOTS (FOR DISSERTATION / PAPER)
+# ============================================
 
-print("\nTop genes expression summary by predicted class:")
-print(summary)
+plt.figure()
+results["ELN_favourable_probability"].hist(bins=50)
+plt.title("TARGET ELN favourable probability distribution")
+plt.xlabel("Probability")
+plt.ylabel("Number of patients")
+plt.savefig(os.path.join(OUTDIR, "probability_histogram.png"))
+plt.close()
+
+plt.figure()
+results["ELN_favourable_probability"].sort_values().reset_index(drop=True).plot()
+plt.title("TARGET patients ranked by ELN favourable probability")
+plt.xlabel("Patients")
+plt.ylabel("Probability")
+plt.savefig(os.path.join(OUTDIR, "probability_ranked_curve.png"))
+plt.close()
+
+print("\nAll outputs saved to:", OUTDIR)
+print("Done ✅")
+
 
