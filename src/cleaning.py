@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 
-# =========================
+
 # 1. LOAD DATA
-# =========================
+
 
 ohsu = pd.read_csv(
     r"C:\Users\mba22ew\test\data_mrna_seq_rpkm.txt",
@@ -28,9 +28,9 @@ print("Original shapes:")
 print("OHSU:", ohsu.shape)
 print("TARGET:", target.shape)
 
-# =========================
+
 # 2. FIX ORIENTATION
-# =========================
+
 
 if ohsu.shape[0] > ohsu.shape[1]:
     print("Transposing OHSU")
@@ -44,9 +44,9 @@ print("\nAfter transpose:")
 print("OHSU:", ohsu.shape)
 print("TARGET:", target.shape)
 
-# =========================
+
 # 3. MAP ENTREZ → HUGO (robust)
-# =========================
+
 
 mapping = mapping[["symbol", "entrez_id"]].dropna()
 
@@ -70,9 +70,9 @@ target = target.T.groupby(level=0).mean().T
 
 print("\nTARGET after gene mapping:", target.shape)
 
-# =========================
+
 # 4. MATCH GENES
-# =========================
+
 
 common_genes = ohsu.columns.intersection(target.columns)
 
@@ -84,9 +84,9 @@ if len(common_genes) == 0:
 ohsu = ohsu[common_genes]
 target = target[common_genes]
 
-# =========================
+
 # 5. FORCE NUMERIC
-# =========================
+
 
 ohsu = ohsu.apply(pd.to_numeric, errors="coerce")
 target = target.apply(pd.to_numeric, errors="coerce")
@@ -95,15 +95,15 @@ target = target.apply(pd.to_numeric, errors="coerce")
 ohsu = ohsu.dropna(axis=1, how="all")
 target = target.dropna(axis=1, how="all")
 
-# =========================
+
 # 6. LOG2 TRANSFORM TARGET
-# =========================
+
 
 target = np.log2(target + 1)
 
-# =========================
+
 # 7. VARIANCE FILTER
-# =========================
+
 
 gene_variance = ohsu.var(axis=0)
 
@@ -122,25 +122,25 @@ print("\nAfter variance filter:")
 print("OHSU:", ohsu.shape)
 print("TARGET:", target.shape)
 
-# =========================
+
 # 8. LOCK COLUMN ORDER
-# =========================
+
 
 target = target[ohsu.columns]
 print("Column order identical:", (ohsu.columns == target.columns).all())
 
-# =========================
+
 # 9. SCALE
-# =========================
+
 
 scaler = StandardScaler()
 
 X_ohsu = scaler.fit_transform(ohsu)
 X_target = scaler.transform(target)
 
-# =========================
+
 # 10. SAVE
-# =========================
+
 
 np.save("X_ohsu.npy", X_ohsu)
 np.save("X_target.npy", X_target)
@@ -148,9 +148,9 @@ np.save("X_target.npy", X_target)
 ohsu.to_csv("ohsu_cleaned_expression.csv")
 target.to_csv("target_cleaned_expression.csv")
 
-# =========================
+
 # 11. SUCCESS MESSAGE
-# =========================
+
 
 print("\n✅ PREPROCESSING COMPLETE")
 print("Final OHSU matrix:", X_ohsu.shape)
