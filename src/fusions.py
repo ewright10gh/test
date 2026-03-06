@@ -1,35 +1,46 @@
 import pandas as pd
+import os
 
-# Load clinical file
+BASE = r"C:\Users\mba22ew\test"
+
+expr = pd.read_csv(os.path.join(BASE,"cleaned","ohsu_cleaned_expression.csv"), index_col=0)
+
 clinical = pd.read_csv(
-    "aml_ohsu_2022_clinical_data.tsv",   # ← change if needed
+    os.path.join(BASE,"aml_ohsu_2022_clinical_data.tsv"),
     sep="\t",
     low_memory=False
-)
+).set_index("Sample ID")
 
-for col in clinical.columns:
-    if "cancer" in col.lower() and "detailed" in col.lower():
-        cancer_col = col
+clinical = clinical.loc[expr.index]
 
-print("Using column:", cancer_col)
+fusion_col = clinical["Cancer Type Detailed"].str.upper()
 
+clinical["fusion_group"] = "OTHER"
 
-unique_values = clinical[cancer_col].dropna().unique()
+clinical.loc[fusion_col.str.contains("PML-RARA", na=False), "fusion_group"] = "PML_RARA"
+clinical.loc[fusion_col.str.contains("RUNX1-RUNX1T1", na=False), "fusion_group"] = "RUNX1_RUNX1T1"
+clinical.loc[fusion_col.str.contains("CBFB-MYH11", na=False), "fusion_group"] = "CBFB_MYH11"
 
-print("\nTotal unique values:", len(unique_values))
-print("\n=== ALL VALUES ===")
-for v in sorted(unique_values):
-    print(v)
+print(clinical["fusion_group"].value_counts())
 
-print("\n=== VALUE COUNTS ===")
-print(clinical[cancer_col].value_counts())
+groups = {}
 
+for fusion in ["PML_RARA","RUNX1_RUNX1T1","CBFB_MYH11"]:
+    groups[fusion] = expr[clinical["fusion_group"] == fusion]
 
-fusion_mask = clinical[cancer_col].str.contains(
-    "fusion|t\\(|inv\\(|cbfb|runx1|kmt2a|pml", 
-    case=False,
-    na=False
-)
+other = expr[clinical["fusion_group"] == "OTHER"]
 
-print("\n=== FUSION-LIKE LABELS ===")
-print(clinical.loc[fusion_mask, cancer_col].value_counts())
+results = {}
+
+for fusion in groups:
+
+    diff = groups[fusion].mean() - other.mean()
+
+    top = diff.sort_values(ascending=False).head(20)
+
+    results[fusion] = top
+
+    print("\nTop genes for", fusion)
+    print(top.head(10))
+
+    top.to_csv(os.path.join(BASE,"results",f"{fusion}_top_genes.csv"))

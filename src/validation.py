@@ -1,76 +1,92 @@
-# =========================
-# TARGET ELN PREDICTION + ANALYSIS
-# =========================
-
-import os
-import numpy as np
 import pandas as pd
-import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
+from sklearn.metrics import classification_report, roc_auc_score
 
-# -------------------------
-# PATHS
-# -------------------------
+# =========================
 
-BASE = r"C:\Users\mba22ew\test"
+# 1. LOAD MODEL PREDICTIONS
 
-X_TARGET_PATH = os.path.join(BASE, "cleaned", "X_target.npy")
-TARGET_EXPR_PATH = os.path.join(BASE, "cleaned", "target_cleaned_expression.csv")
+# =========================
 
-MODEL_PATH = os.path.join(BASE, "models", "ridge_eln_model.joblib")
-SCALER_PATH = os.path.join(BASE, "models", "ridge_scaler.joblib")
+results = pd.read_csv(r"C:\Users\mba22ew\test\results\tcga_eln_predictions.csv")
 
-OUT_DIR = os.path.join(BASE, "results")
-os.makedirs(OUT_DIR, exist_ok=True)
+print("Predictions loaded:", results.shape)
 
-# -------------------------
-# LOAD DATA
-# -------------------------
+# =========================
 
-print("Loading TARGET matrix...")
-X_target = np.load(X_TARGET_PATH)
+# 2. LOAD TCGA CLINICAL
 
-print("Loading TARGET expression for patient IDs...")
-target_expr = pd.read_csv(TARGET_EXPR_PATH, index_col=0)
+# =========================
 
-print("Loading model + scaler...")
-model = joblib.load(MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
+clinical = pd.read_csv(
+r"C:\Users\mba22ew\test\laml_tcga_pub_clinical_data.tsv",
+sep="\t",
+low_memory=False
+)
 
-# -------------------------
-# SCALE + PREDICT
-# -------------------------
+print("Clinical loaded:", clinical.shape)
 
-X_target_scaled = scaler.transform(X_target)
+# TCGA sample IDs
 
-print("Predicting ELN favourable status...")
-prob = model.predict_proba(X_target_scaled)[:, 1]
-pred = (prob >= 0.5).astype(int)
+clinical = clinical.set_index("Sample ID")
 
-# -------------------------
-# BUILD RESULTS TABLE
-# -------------------------
+# =========================
 
-results = pd.DataFrame({
-    "ELN_favourable_probability": prob,
-    "ELN_predicted_class": pred
-}, index=target_expr.index)
+# 3. ALIGN SAMPLES
 
-results.to_csv(os.path.join(OUT_DIR, "target_eln_predictions.csv"))
+# =========================
 
-print("\nPrediction counts:")
-print(results["ELN_predicted_class"].value_counts())
+common_samples = results["Sample_ID"].astype(str).isin(clinical.index)
 
-# -------------------------
-# CONFIDENCE STRATIFICATION
-# -------------------------
-high_conf_fav = results[results.ELN_favourable_probability >= 0.6]
-high_conf_adv = results[results.ELN_favourable_probability <= 0.2]
+results = results[common_samples]
+clinical = clinical.loc[results["Sample_ID"]]
 
-print("High-confidence favourable:", len(high_conf_fav))
-print("High-confidence adverse:", len(high_conf_adv))
+print("Samples overlapping:", len(results))
 
-high_conf_fav.to_csv(os.path.join(OUT_DIR, "target_high_conf_favourable.csv"))
-high_conf_adv.to_csv(os.path.join(OUT_DIR, "target_high_conf_adverse.csv"))
+# =========================
 
+# 4. MAP CYTOGENETICS → ELN
+
+# =========================
+
+def map_fusion(label):
+
+
+    label = str(label).upper()
+
+    if "15;17" in label:
+        return 1
+
+    if "8;21" in label:
+        return 1
+
+    if "INV(16)" in label:
+        return 1
+
+    return 0
+
+
+y_true = clinical["Cytogenetics"].apply(map_fusion)
+y_pred = results["ELN_predicted"]
+y_prob = results["ELN_probability"]
+
+print("\nTrue ELN distribution:")
+print(y_true.value_counts())
+
+# =========================
+
+# 5. EVALUATION
+
+# =========================
+
+print("\n=== CLASSIFICATION REPORT ===")
+print(classification_report(y_true, y_pred))
+
+if y_true.nunique() > 1:
+
+
+    roc = roc_auc_score(y_true, y_prob)
+    print("\nROC AUC:", roc)
+
+
+else:
+    print("\nROC AUC cannot be computed (only one class present)")

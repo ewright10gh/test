@@ -1,27 +1,51 @@
-import numpy as np
 import pandas as pd
-from joblib import load
+import numpy as np
+import joblib
 
-# load data
-X_tcga = np.load(r"C:\Users\mba22ew\test\cleaned\X_tcga.npy")
+# -----------------------------
+# LOAD MODEL
+# -----------------------------
+model = joblib.load(r"C:\Users\mba22ew\test\models\ridge_eln_model.joblib")
+scaler = joblib.load(r"C:\Users\mba22ew\test\models\ridge_scaler.joblib")
 
-# load model + scaler
-model = load(r"C:\Users\mba22ew\test\models\model.joblib")
-scaler = load(r"C:\Users\mba22ew\test\models\scaler.joblib")
+print("Model + scaler loaded")
 
-# scale
-X_tcga = scaler.transform(X_tcga)
-
-# predict
-probs = model.predict_proba(X_tcga)[:, 1]
-
-# save
-pd.DataFrame({
-    "Sample": range(len(probs)),
-    "Favourable_Probability": probs
-}).to_csv(
-    r"C:\Users\mba22ew\test\results\tcga_predictions.csv",
-    index=False
+# -----------------------------
+# LOAD TCGA EXPRESSION
+# -----------------------------
+X = pd.read_csv(
+    r"C:\Users\mba22ew\test\cleaned\tcga_cleaned_expression.csv",
+    index_col=0
 )
 
-print("TCGA prediction complete")
+# remove metadata row if present
+X = X[~X.index.str.contains("Entrez", case=False, na=False)]
+
+print("Expression matrix shape:", X.shape)
+
+# -----------------------------
+# SCALE USING TRAINING SCALER
+# -----------------------------
+X_scaled = scaler.transform(X.values)
+
+# -----------------------------
+# PREDICT
+# -----------------------------
+probs = model.predict_proba(X_scaled)[:,1]
+
+results = pd.DataFrame({
+    "Sample_ID": X.index,
+    "ELN_probability": probs
+})
+
+results["ELN_predicted"] = (results["ELN_probability"] > 0.7).astype(int)
+
+print("\nPrediction summary:")
+print(results["ELN_predicted"].value_counts())
+
+# -----------------------------
+# SAVE RESULTS
+# -----------------------------
+results.to_csv(r"C:\Users\mba22ew\test\results\tcga_eln_predictions.csv", index=False)
+
+print("\n✅ TCGA predictions saved")

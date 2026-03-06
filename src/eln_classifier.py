@@ -82,7 +82,7 @@ X_test = scaler.transform(X_test)
 # 7. TRAIN RIDGE LOGISTIC REGRESSION WITH CV
 # =========================
 ridge = LogisticRegressionCV(
-    Cs=np.logspace(-4, 4, 10),
+    Cs=np.logspace(-4, 4, 20),
     cv=5,
     penalty="l2",
     solver="lbfgs",
