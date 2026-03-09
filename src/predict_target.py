@@ -1,6 +1,6 @@
-# ============================================
+
 # PREDICT ELN FAVOURABLE STATUS IN TARGET
-# ============================================
+
 
 import os
 import numpy as np
@@ -8,9 +8,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from joblib import load
 
-# ============================================
+
 # PATHS
-# ============================================
+
 
 BASE = r"C:\Users\mba22ew\test"
 
@@ -22,9 +22,9 @@ MODEL_PATH = os.path.join(BASE, "models", "ridge_eln_model.joblib")
 OUTDIR = os.path.join(BASE, "results")
 os.makedirs(OUTDIR, exist_ok=True)
 
-# ============================================
+
 # LOAD DATA
-# ============================================
+
 
 print("Loading TARGET matrix...")
 X_target = np.load(X_TARGET_PATH)
@@ -38,9 +38,9 @@ model = load(MODEL_PATH)
 
 print("TARGET shape:", X_target.shape)
 
-# ============================================
+
 # PREDICT
-# ============================================
+
 
 print("Predicting ELN favourable status...")
 
@@ -52,11 +52,11 @@ results = pd.DataFrame({
     "ELN_predicted_class": pred
 }, index=sample_ids)
 
-# ============================================
-# HIGH-CONFIDENCE CALLS
-# ============================================
 
-high_conf_fav = results[results["ELN_favourable_probability"] >= 0.6]
+# HIGH-CONFIDENCE CALLS
+
+
+high_conf_fav = results[results["ELN_favourable_probability"] >= 0.7]
 high_conf_adv = results[results["ELN_favourable_probability"] <= 0.3]
 
 print("\nPrediction counts:")
@@ -65,24 +65,24 @@ print(results["ELN_predicted_class"].value_counts())
 print("\nHigh-confidence favourable:", len(high_conf_fav))
 print("High-confidence adverse:", len(high_conf_adv))
 
-# ============================================
+
 # PROBABILITY DIAGNOSTICS
-# ============================================
+
 
 print("\nProbability summary:")
 print(results["ELN_favourable_probability"].describe())
 
-# ============================================
+
 # SAVE TABLES
-# ============================================
+
 
 results.to_csv(os.path.join(OUTDIR, "TARGET_ELN_predictions.csv"))
 high_conf_fav.to_csv(os.path.join(OUTDIR, "TARGET_high_conf_favourable.csv"))
 high_conf_adv.to_csv(os.path.join(OUTDIR, "TARGET_high_conf_adverse.csv"))
 
-# ============================================
-# PLOTS (FOR DISSERTATION / PAPER)
-# ============================================
+
+# PLOTS (FOR PAPER)
+
 
 plt.figure()
 results["ELN_favourable_probability"].hist(bins=50)

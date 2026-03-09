@@ -1,6 +1,6 @@
-# ============================================
+
 # COMPARE TOP GENES ACROSS OHSU, TCGA, TARGET
-# ============================================
+
 
 import os
 import pandas as pd
@@ -23,9 +23,9 @@ MODEL_PATH = os.path.join(BASE, "models", "ridge_eln_model.joblib")
 OUTDIR = os.path.join(BASE, "results")
 os.makedirs(OUTDIR, exist_ok=True)
 
-# ============================================
+
 # LOAD DATA
-# ============================================
+
 
 print("Loading expression matrices...")
 
@@ -37,9 +37,9 @@ print("OHSU:", ohsu.shape)
 print("TCGA:", tcga.shape)
 print("TARGET:", target.shape)
 
-# ============================================
+
 # LOAD LABELS / PREDICTIONS
-# ============================================
+
 
 ohsu_labels = pd.read_csv(OHSU_LABELS, index_col=0).iloc[:,0]
 tcga_pred = pd.read_csv(TCGA_PRED, index_col=0)
@@ -50,9 +50,9 @@ ohsu = ohsu.loc[ohsu_labels.index]
 tcga = tcga.loc[tcga_pred.index]
 target = target.loc[target_pred.index]
 
-# ============================================
+
 # FUNCTION TO COMPUTE TOP GENES
-# ============================================
+
 
 def compute_stats(expr, labels):
 
@@ -71,9 +71,9 @@ def compute_stats(expr, labels):
     return stats
 
 
-# ============================================
+
 # OHSU
-# ============================================
+
 
 print("\nComputing OHSU stats...")
 
@@ -83,9 +83,9 @@ top_ohsu = ohsu_stats.sort_values("mean_diff", ascending=False).head(50)
 
 top_ohsu.to_csv(os.path.join(OUTDIR,"OHSU_top_genes.csv"))
 
-# ============================================
+
 # TCGA
-# ============================================
+
 
 print("Computing TCGA stats...")
 
@@ -95,9 +95,9 @@ top_tcga = tcga_stats.sort_values("mean_diff", ascending=False).head(50)
 
 top_tcga.to_csv(os.path.join(OUTDIR,"TCGA_top_genes.csv"))
 
-# ============================================
+
 # TARGET
-# ============================================
+
 
 print("Computing TARGET stats...")
 
@@ -107,9 +107,9 @@ top_target = target_stats.sort_values("mean_diff", ascending=False).head(50)
 
 top_target.to_csv(os.path.join(OUTDIR,"TARGET_top_genes.csv"))
 
-# ============================================
+
 # GENE OVERLAP
-# ============================================
+
 
 set_ohsu = set(top_ohsu.index)
 set_tcga = set(top_tcga.index)
@@ -131,9 +131,9 @@ pd.Series(list(overlap_all)).to_csv(
     index=False
 )
 
-# ============================================
+
 # CHECK MYH11 RANKING
-# ============================================
+
 
 def check_gene(gene, stats):
 
@@ -150,9 +150,9 @@ check_gene("MYH11", ohsu_stats)
 check_gene("MYH11", tcga_stats)
 check_gene("MYH11", target_stats)
 
-# ============================================
+
 # COMPARE WITH RIDGE MODEL COEFFICIENTS
-# ============================================
+
 
 print("\nComparing model coefficients...")
 
@@ -167,9 +167,9 @@ coef_df = pd.DataFrame({
 
 coef_df = coef_df.dropna()
 
-# ============================================
+
 # PLOT COEFFICIENT VS EXPRESSION DIFFERENCE
-# ============================================
+
 
 plt.figure(figsize=(6,6))
 
@@ -188,18 +188,18 @@ plt.savefig(os.path.join(OUTDIR,"ridge_vs_expression.png"))
 
 plt.close()
 
-# ============================================
+
 # SAVE FULL TABLE
-# ============================================
+
 
 coef_df.to_csv(os.path.join(OUTDIR,"model_gene_weights_vs_expression.csv"))
 
 print("\n✅ Gene comparison complete")
 print("Results saved to:", OUTDIR)
 
-# ============================================
+
 # SIMPLE INTERPRETABLE FIGURES
-# ============================================
+
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -331,3 +331,162 @@ if len(shared) > 0:
 
 
 print("✅ New simplified figures saved")
+print("\n--- Generating fusion subtype heatmap ---")
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# -------------------------------
+# Load expression
+# -------------------------------
+
+expr = pd.read_csv(
+    r"C:\Users\mba22ew\test\cleaned\ohsu_cleaned_expression.csv",
+    index_col=0
+)
+
+# genes as rows → transpose if needed
+if expr.shape[0] > expr.shape[1]:
+    expr = expr.T
+
+print("Expression shape:", expr.shape)
+
+# -------------------------------
+# Load clinical
+# -------------------------------
+
+import pandas as pd
+
+clin = pd.read_csv(
+    r"C:\Users\mba22ew\test\aml_ohsu_2022_clinical_data.tsv",
+    sep="\t"
+)
+
+print(clin.columns)
+clin = clin.set_index("Sample ID")
+
+print("Clinical shape:", clin.shape)
+
+# -------------------------------
+# Map fusion types
+# -------------------------------
+
+def map_fusion(x):
+
+    x = str(x).upper()
+
+    if "PML" in x or "15;17" in x:
+        return "PML_RARA"
+
+    if "RUNX1" in x or "8;21" in x:
+        return "RUNX1_RUNX1T1"
+
+    if "CBFB" in x or "INV(16)" in x:
+        return "CBFB_MYH11"
+
+    return "OTHER"
+
+
+clin["fusion_program"] = clin["Cancer Type Detailed"].apply(map_fusion)
+
+# -------------------------------
+# Align samples
+# -------------------------------
+
+common = expr.index.intersection(clin.index)
+
+expr = expr.loc[common]
+clin = clin.loc[common]
+
+print("Samples aligned:", len(common))
+
+# keep only fusion samples
+fusion_mask = clin["fusion_program"] != "OTHER"
+
+expr_fusion = expr.loc[fusion_mask]
+labels = clin.loc[fusion_mask, "fusion_program"]
+
+print("\nFusion counts:")
+print(labels.value_counts())
+
+# -------------------------------
+# Load top genes from cohorts
+# -------------------------------
+
+ohsu_genes = pd.read_csv(
+    r"C:\Users\mba22ew\test\results\OHSU_top_genes.csv"
+)["gene"]
+
+tcga_genes = pd.read_csv(
+    r"C:\Users\mba22ew\test\results\TCGA_top_genes.csv"
+)["gene"]
+
+target_genes = pd.read_csv(
+    r"C:\Users\mba22ew\test\results\TARGET_top_genes.csv"
+)["gene"]
+
+# take top 50 from each
+ohsu_genes = set(ohsu_genes.head(50))
+tcga_genes = set(tcga_genes.head(50))
+target_genes = set(target_genes.head(50))
+
+# -------------------------------
+# Find shared genes
+# -------------------------------
+
+shared_genes = list(ohsu_genes & tcga_genes & target_genes)
+
+print("\nShared predictive genes:", len(shared_genes))
+
+# fallback if overlap small
+if len(shared_genes) < 10:
+    shared_genes = list(ohsu_genes | tcga_genes | target_genes)[:40]
+    print("Using union genes:", len(shared_genes))
+
+# -------------------------------
+# Build heatmap matrix
+# -------------------------------
+
+heat = expr_fusion[shared_genes]
+
+# Z-score normalisation
+heat = (heat - heat.mean()) / heat.std()
+
+# order samples by subtype
+order = labels.sort_values().index
+heat = heat.loc[order]
+
+# -------------------------------
+# Color bar for fusions
+# -------------------------------
+
+fusion_colors = {
+    "PML_RARA": "#e41a1c",
+    "RUNX1_RUNX1T1": "#377eb8",
+    "CBFB_MYH11": "#4daf4a"
+}
+
+col_colors = labels.map(fusion_colors)
+
+# -------------------------------
+# Plot heatmap
+# -------------------------------
+
+g = sns.clustermap(
+    heat.T,
+    cmap="vlag",
+    col_cluster=False,
+    xticklabels=False,
+    yticklabels=True,
+    col_colors=col_colors,
+    figsize=(10,8)
+)
+
+plt.savefig(
+    r"C:\Users\mba22ew\test\results\fusion_subtype_heatmap.png",
+    dpi=400
+)
+
+print("\nFusion subtype heatmap saved:")
+print(r"C:\Users\mba22ew\test\results\fusion_subtype_heatmap.png")
