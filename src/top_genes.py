@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from joblib import load
 
+
 BASE = r"C:\Users\mba22ew\test"
 
 OHSU_EXPR = os.path.join(BASE, "cleaned", "ohsu_cleaned_expression.csv")
@@ -18,14 +19,11 @@ OHSU_LABELS = os.path.join(BASE, "cleaned", "ohsu_favorable_labels.csv")
 TCGA_PRED = os.path.join(BASE, "results", "TCGA_ELN_predictions.csv")
 TARGET_PRED = os.path.join(BASE, "results", "TARGET_ELN_predictions.csv")
 
-MODEL_PATH = os.path.join(BASE, "models", "ridge_eln_model.joblib")
-
 OUTDIR = os.path.join(BASE, "results")
 os.makedirs(OUTDIR, exist_ok=True)
 
 
 # LOAD DATA
-
 
 print("Loading expression matrices...")
 
@@ -40,7 +38,6 @@ print("TARGET:", target.shape)
 
 # LOAD LABELS / PREDICTIONS
 
-
 ohsu_labels = pd.read_csv(OHSU_LABELS, index_col=0).iloc[:,0]
 tcga_pred = pd.read_csv(TCGA_PRED, index_col=0)
 target_pred = pd.read_csv(TARGET_PRED, index_col=0)
@@ -52,7 +49,6 @@ target = target.loc[target_pred.index]
 
 
 # FUNCTION TO COMPUTE TOP GENES
-
 
 def compute_stats(expr, labels):
 
@@ -71,9 +67,7 @@ def compute_stats(expr, labels):
     return stats
 
 
-
 # OHSU
-
 
 print("\nComputing OHSU stats...")
 
@@ -81,11 +75,16 @@ ohsu_stats = compute_stats(ohsu, ohsu_labels)
 
 top_ohsu = ohsu_stats.sort_values("mean_diff", ascending=False).head(50)
 
-top_ohsu.to_csv(os.path.join(OUTDIR,"OHSU_top_genes.csv"))
+# add gene column
+top_ohsu = top_ohsu.reset_index().rename(columns={"index": "gene"})
+
+top_ohsu.to_csv(
+    os.path.join(OUTDIR, "OHSU_top_genes.csv"),
+    index=False
+)
 
 
 # TCGA
-
 
 print("Computing TCGA stats...")
 
@@ -93,11 +92,15 @@ tcga_stats = compute_stats(tcga, tcga_pred["ELN_predicted"])
 
 top_tcga = tcga_stats.sort_values("mean_diff", ascending=False).head(50)
 
-top_tcga.to_csv(os.path.join(OUTDIR,"TCGA_top_genes.csv"))
+top_tcga = top_tcga.reset_index().rename(columns={"index": "gene"})
+
+top_tcga.to_csv(
+    os.path.join(OUTDIR, "TCGA_top_genes.csv"),
+    index=False
+)
 
 
 # TARGET
-
 
 print("Computing TARGET stats...")
 
@@ -105,15 +108,19 @@ target_stats = compute_stats(target, target_pred["ELN_predicted_class"])
 
 top_target = target_stats.sort_values("mean_diff", ascending=False).head(50)
 
-top_target.to_csv(os.path.join(OUTDIR,"TARGET_top_genes.csv"))
+top_target = top_target.reset_index().rename(columns={"index": "gene"})
+
+top_target.to_csv(
+    os.path.join(OUTDIR, "TARGET_top_genes.csv"),
+    index=False
+)
 
 
 # GENE OVERLAP
 
-
-set_ohsu = set(top_ohsu.index)
-set_tcga = set(top_tcga.index)
-set_target = set(top_target.index)
+set_ohsu = set(top_ohsu["gene"])
+set_tcga = set(top_tcga["gene"])
+set_target = set(top_target["gene"])
 
 overlap_all = set_ohsu & set_tcga & set_target
 overlap_ohsu_tcga = set_ohsu & set_tcga
@@ -125,12 +132,13 @@ print("OHSU ∩ TARGET:", len(overlap_ohsu_target))
 print("All three:", len(overlap_all))
 print("Shared genes:", overlap_all)
 
-# Save overlaps
-pd.Series(list(overlap_all)).to_csv(
-    os.path.join(OUTDIR,"shared_genes_all_datasets.csv"),
+
+# SAVE SHARED GENES WITH HEADER
+
+pd.DataFrame({"gene": list(overlap_all)}).to_csv(
+    os.path.join(OUTDIR, "shared_genes_all_datasets.csv"),
     index=False
 )
-
 
 # CHECK MYH11 RANKING
 
