@@ -200,13 +200,21 @@ if uploaded is not None:
     target = target.reindex(columns=model_genes, fill_value=0)
 
     # -----------------------------
-    # HANDLE NaNs
+    # HANDLE NaNs USING TRAINING MEANS
     # -----------------------------
-
-    if target.isna().sum().sum() > 0:
-        st.write("NaNs detected — replacing with 0")
-        target = target.fillna(0)
-
+    
+    nan_count = target.isna().sum().sum()
+    
+    if nan_count > 0:
+    
+        st.write(f"NaNs detected: {nan_count}")
+    
+        # replace NaNs with the training mean expression for each gene
+        gene_means = pd.Series(scaler.mean_, index=model_genes)
+    
+        target = target.fillna(gene_means)
+    
+        st.write("NaNs replaced with training gene means")
     # -----------------------------
     # SCALE
     # -----------------------------
