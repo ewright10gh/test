@@ -129,3 +129,22 @@ print("Samples:", X.shape[0])
 print("Genes:", X.shape[1])
 print("Favorable samples:", y.sum())
 print("Non-favorable samples:", len(y) - y.sum())
+
+
+import matplotlib.pyplot as plt
+
+# 1. Get the range of C values (regularization strength) used in your CV
+c_values = ridge.Cs_
+
+# 2. Get the coefficients for each C (this requires a slightly different fit 
+# or manual loop if using LogisticRegressionCV, but here is the logic:)
+# For simplicity, we can plot the final coefficients sorted:
+plt.figure(figsize=(10, 6))
+plt.semilogx(c_values, ridge.coefs_paths_[1].mean(axis=0)) # Mean across CV folds
+
+plt.title('Ridge Coefficient Paths')
+plt.xlabel('C (Inverse Regularization Strength)')
+plt.ylabel('Coefficients')
+plt.axvline(ridge.C_, linestyle='--', color='k', label='Best C')
+plt.legend()
+plt.show()
