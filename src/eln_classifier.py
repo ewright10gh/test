@@ -34,24 +34,42 @@ print("Clinical data aligned:", clinical.shape)
 # 3. MAP TO FUSION LABELS
 # =========================
 def assign_fusion(label):
-    """Map free-text clinical fusion to concise label."""
     if pd.isna(label):
         return "NONE"
-    label = label.upper()
-    if "PML-RARA" in label:
+
+    label = str(label).upper()
+
+    # PML-RARA / APL
+    if any(x in label for x in [
+        "PML-RARA", "PML_RARA", "T(15;17)", "APL", "PROMYELOCYTIC"
+    ]):
         return "PML_RARA"
-    elif "RUNX1-RUNX1T1" in label:
+
+    # RUNX1-RUNX1T1
+    if any(x in label for x in [
+        "RUNX1-RUNX1T1", "RUNX1_RUNX1T1", "AML1-ETO", "T(8;21)"
+    ]):
         return "RUNX1_RUNX1T1"
-    elif "CBFB-MYH11" in label:
+
+    # CBFB-MYH11
+    if any(x in label for x in [
+        "CBFB-MYH11", "CBFB_MYH11", "INV(16)", "T(16;16)"
+    ]):
         return "CBFB_MYH11"
-    elif "MLLT3-MLL" in label or "KMT2A" in label:
+
+    # KMT2A rearrangements
+    if "KMT2A" in label or "MLL" in label:
         return "KMT2A"
-    elif "RPN1-EVI1" in label or "INV(3)" in label:
+
+    # MECOM / inv(3)
+    if "INV(3)" in label or "EVI1" in label:
         return "MECOM_INV3"
-    elif "DEK-NUP214" in label:
+
+    # DEK-NUP214
+    if "DEK-NUP214" in label or "T(6;9)" in label:
         return "DEK_NUP214"
-    else:
-        return "NONE"
+
+    return "NONE"
 
 clinical["fusion_class"] = clinical["Cancer Type Detailed"].apply(assign_fusion)
 
