@@ -190,7 +190,7 @@ sns.heatmap(
 
 plt.xlabel("Predicted")
 plt.ylabel("True")
-plt.title("VALIDATA favourable fusion Classification Confusion Matrix")
+plt.title("2018 OHSU Classification Confusion Matrix")
 
 plt.tight_layout()
 plt.savefig("validata_confusion_matrix.png", dpi=300)

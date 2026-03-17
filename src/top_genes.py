@@ -13,11 +13,17 @@ from joblib import load
 
 BASE = r"C:\Users\mba22ew\test"
 
+# 2022 OHSU (training cohort)
 OHSU_EXPR = os.path.join(BASE, "cleaned", "ohsu_cleaned_expression.csv")
+OHSU_LABELS = os.path.join(BASE, "cleaned", "ohsu_favorable_labels.csv")
+
+# 2018 OHSU from VALIDATA (external validation cohort)
+OHSU_2018_EXPR = os.path.join(BASE, "cleaned", "validata_cleaned_expression.csv")
+OHSU_2018_PRED = os.path.join(BASE, "results", "validata_favourable_fusion_predictions.csv")
+
 TCGA_EXPR = os.path.join(BASE, "cleaned", "tcga_cleaned_expression.csv")
 TARGET_EXPR = os.path.join(BASE, "cleaned", "target_cleaned_expression.csv")
 
-OHSU_LABELS = os.path.join(BASE, "cleaned", "ohsu_favorable_labels.csv")
 TCGA_PRED = os.path.join(BASE, "results", "TCGA_favourable_fusion_predictions.csv")
 TARGET_PRED = os.path.join(BASE, "results", "TARGET_favourable_fusion_predictions.csv")
 
@@ -29,23 +35,32 @@ os.makedirs(OUTDIR, exist_ok=True)
 
 print("Loading expression matrices...")
 
-ohsu = pd.read_csv(OHSU_EXPR, index_col=0)
+ohsu_2022 = pd.read_csv(OHSU_EXPR, index_col=0)
+ohsu_2018 = pd.read_csv(OHSU_2018_EXPR, index_col=0)
 tcga = pd.read_csv(TCGA_EXPR, index_col=0)
 target = pd.read_csv(TARGET_EXPR, index_col=0)
 
-print("OHSU:", ohsu.shape)
+print("OHSU 2022:", ohsu_2022.shape)
+print("OHSU 2018 (VALIDATA):", ohsu_2018.shape)
 print("TCGA:", tcga.shape)
 print("TARGET:", target.shape)
 
 
 # LOAD LABELS / PREDICTIONS
 
-ohsu_labels = pd.read_csv(OHSU_LABELS, index_col=0).iloc[:,0]
+ohsu_2022_labels = pd.read_csv(OHSU_LABELS, index_col=0).iloc[:,0]
+ohsu_2018_pred = pd.read_csv(OHSU_2018_PRED, index_col=0)
 tcga_pred = pd.read_csv(TCGA_PRED, index_col=0)
 target_pred = pd.read_csv(TARGET_PRED, index_col=0)
 
+# Ensure valid binary values for 2018 prediction
+ohsu_2018_pred["favourable_fusion_predicted"] = pd.to_numeric(
+    ohsu_2018_pred["favourable_fusion_predicted"], errors="coerce"
+).fillna(0).astype(int)
+
 # Align sample order
-ohsu = ohsu.loc[ohsu_labels.index]
+ohsu_2022 = ohsu_2022.loc[ohsu_2022_labels.index]
+ohsu_2018 = ohsu_2018.loc[ohsu_2018_pred.index]
 tcga = tcga.loc[tcga_pred.index]
 target = target.loc[target_pred.index]
 
@@ -69,19 +84,34 @@ def compute_stats(expr, labels):
     return stats
 
 
-# OHSU
+# OHSU (2022 training data)
 
-print("\nComputing OHSU stats...")
+print("\nComputing OHSU 2022 stats...")
 
-ohsu_stats = compute_stats(ohsu, ohsu_labels)
+ohsu_2022_stats = compute_stats(ohsu_2022, ohsu_2022_labels)
 
-top_ohsu = ohsu_stats.sort_values("mean_diff", ascending=False).head(50)
+top_ohsu_2022 = ohsu_2022_stats.sort_values("mean_diff", ascending=False).head(50)
 
 # add gene column
-top_ohsu = top_ohsu.reset_index().rename(columns={"index": "gene"})
+top_ohsu_2022 = top_ohsu_2022.reset_index().rename(columns={"index": "gene"})
 
-top_ohsu.to_csv(
-    os.path.join(OUTDIR, "OHSU_top_genes.csv"),
+top_ohsu_2022.to_csv(
+    os.path.join(OUTDIR, "OHSU_2022_top_genes.csv"),
+    index=False
+)
+
+# OHSU (2018 VALIDATA)
+
+print("Computing OHSU 2018 (VALIDATA) stats...")
+
+ohsu_2018_stats = compute_stats(ohsu_2018, ohsu_2018_pred["favourable_fusion_predicted"])
+
+top_ohsu_2018 = ohsu_2018_stats.sort_values("mean_diff", ascending=False).head(50)
+
+top_ohsu_2018 = top_ohsu_2018.reset_index().rename(columns={"index": "gene"})
+
+top_ohsu_2018.to_csv(
+    os.path.join(OUTDIR, "OHSU_2018_top_genes.csv"),
     index=False
 )
 
@@ -120,18 +150,21 @@ top_target.to_csv(
 
 # GENE OVERLAP
 
-set_ohsu = set(top_ohsu["gene"])
+set_ohsu_2022 = set(top_ohsu_2022["gene"])
+set_ohsu_2018 = set(top_ohsu_2018["gene"])
 set_tcga = set(top_tcga["gene"])
 set_target = set(top_target["gene"])
 
-overlap_all = set_ohsu & set_tcga & set_target
-overlap_ohsu_tcga = set_ohsu & set_tcga
-overlap_ohsu_target = set_ohsu & set_target
+overlap_all = set_ohsu_2022 & set_ohsu_2018 & set_tcga & set_target
+overlap_ohsu_2022_tcga = set_ohsu_2022 & set_tcga
+overlap_ohsu_2018_tcga = set_ohsu_2018 & set_tcga
+overlap_ohsu_2022_target = set_ohsu_2022 & set_target
 
 print("\nGene overlap:")
-print("OHSU ∩ TCGA:", len(overlap_ohsu_tcga))
-print("OHSU ∩ TARGET:", len(overlap_ohsu_target))
-print("All three:", len(overlap_all))
+print("OHSU 2022 ∩ TCGA:", len(overlap_ohsu_2022_tcga))
+print("OHSU 2018 ∩ TCGA:", len(overlap_ohsu_2018_tcga))
+print("OHSU 2022 ∩ TARGET:", len(overlap_ohsu_2022_target))
+print("All four datasets:", len(overlap_all))
 print("Shared genes:", overlap_all)
 
 
@@ -156,7 +189,8 @@ def check_gene(gene, stats):
 
 
 print("\nChecking MYH11:")
-check_gene("MYH11", ohsu_stats)
+check_gene("MYH11", ohsu_2022_stats)
+check_gene("MYH11", ohsu_2018_stats)
 check_gene("MYH11", tcga_stats)
 check_gene("MYH11", target_stats)
 
@@ -168,11 +202,11 @@ print("\nComparing model coefficients...")
 
 model = load(MODEL_PATH)
 
-coefs = pd.Series(model.coef_[0], index=ohsu.columns)
+coefs = pd.Series(model.coef_[0], index=ohsu_2022.columns)
 
 coef_df = pd.DataFrame({
     "ridge_coef": coefs,
-    "expression_diff": ohsu_stats["mean_diff"]
+    "expression_diff": ohsu_2022_stats["mean_diff"]
 })
 
 coef_df = coef_df.dropna()
@@ -242,14 +276,16 @@ os.makedirs(FIGDIR, exist_ok=True)
 print("Generating dataset gene heatmap...")
 
 heatmap_df = pd.DataFrame({
-    "OHSU": ohsu_stats["mean_diff"],
+    "OHSU 2022": ohsu_2022_stats["mean_diff"],
+    "OHSU 2018": ohsu_2018_stats["mean_diff"],
     "TCGA": tcga_stats["mean_diff"],
     "TARGET": target_stats["mean_diff"]
 })
 
 heatmap_df = heatmap_df.loc[
     heatmap_df.index
-    .intersection(ohsu_stats.index)
+    .intersection(ohsu_2022_stats.index)
+    .intersection(ohsu_2018_stats.index)
     .intersection(tcga_stats.index)
     .intersection(target_stats.index)
 ]
@@ -296,12 +332,12 @@ top_heatmap_genes = heatmap_df.index.tolist()
 
 print("Generating dataset comparison scatter plot...")
 
-common = ohsu_stats.index.intersection(tcga_stats.index)
+common = ohsu_2022_stats.index.intersection(tcga_stats.index)
 
 plt.figure(figsize=(6,6))
 
 plt.scatter(
-    ohsu_stats.loc[common,"mean_diff"],
+    ohsu_2022_stats.loc[common,"mean_diff"],
     tcga_stats.loc[common,"mean_diff"],
     alpha=0.6,
     s=40
@@ -326,11 +362,11 @@ plt.close()
 
 print("Generating top gene barplot...")
 
-top_genes = ohsu_stats.sort_values("mean_diff", ascending=False).head(15)
+top_genes = ohsu_2022_stats.sort_values("mean_diff", ascending=False).head(15)
 
 plt.figure(figsize=(7,6))
 
-top_genes["mean_diff"].sort_values().plot.barh(color="#4C72B0")
+top_genes["mean_diff"].sort_values().plot.barh(color="#ce3581")
 
 plt.xlabel("Expression difference (favourable − adverse)")
 plt.ylabel("Gene")
@@ -353,15 +389,15 @@ shared = list(overlap_all)
 if len(shared) > 0:
 
     shared_df = pd.DataFrame({
-        "OHSU": ohsu_stats.loc[shared,"mean_diff"],
+        "OHSU": ohsu_2022_stats.loc[shared,"mean_diff"],
         "TCGA": tcga_stats.loc[shared,"mean_diff"],
         "TARGET": target_stats.loc[shared,"mean_diff"]
     })
-
+    purple_pink_blue = sns.color_palette(["#D6C20C", "#ce3581", "#EC7608"])
     shared_df.plot(
         kind="bar",
         figsize=(8,6),
-        colormap="Set2"
+        color=purple_pink_blue
     )
 
     plt.ylabel("Expression difference")
@@ -424,7 +460,7 @@ def map_fusion(x):
     if "PML" in x or "15;17" in x:
         return "PML_RARA"
 
-    if "RUNX1" in x or "8;21" in x:
+    if "RUNX1T1" in x or "8;21" in x:
         return "RUNX1_RUNX1T1"
 
     if "CBFB" in x or "INV(16)" in x:
@@ -491,7 +527,7 @@ fusion_means = expr_fusion.groupby(labels).mean()
 fusion_means = fusion_means.T
 
 # select favorable genes from the dataset heatmap (genes with positive expression difference in OHSU)
-favorable_top_genes = [gene for gene in top_heatmap_genes if ohsu_stats.loc[gene, "mean_diff"] > 0]
+favorable_top_genes = [gene for gene in top_heatmap_genes if ohsu_2022_stats.loc[gene, "mean_diff"] > 0]
 
 if len(favorable_top_genes) >= 5:
     selected_genes = favorable_top_genes
@@ -536,8 +572,15 @@ print("Fusion program heatmap saved.")
 
 print("Generating fusion frequency figure...")
 
-# OHSU counts
+# OHSU counts (2022)
 ohsu_counts = labels.value_counts()
+
+# OHSU 2018 VALIDATA predicted fusions
+validata_fusion = pd.read_csv(
+    os.path.join(BASE,"results","fusion_inference","VALIDATA_fusion_inference.csv")
+)
+
+validata_counts = validata_fusion["Predicted_fusion_program"].value_counts()
 
 # TCGA predicted fusions
 tcga_fusion = pd.read_csv(
@@ -558,7 +601,8 @@ target_counts = target_fusion["Predicted_fusion_program"].value_counts()
 # ----------------------------------------------------------
 
 fusion_freq = pd.DataFrame({
-    "OHSU": ohsu_counts,
+    "OHSU 2022": ohsu_counts,
+    "OHSU 2018": validata_counts,
     "TCGA": tcga_counts,
     "TARGET": target_counts
 })
@@ -573,10 +617,12 @@ fusion_freq_percent = fusion_freq.div(
 # Plot
 # ----------------------------------------------------------
 
+
+
 fusion_freq_percent.T.plot(
     kind="bar",
     figsize=(7,5),
-    colormap="Set1"
+    color=purple_pink_blue
 )
 
 plt.ylabel("Frequency (%)")

@@ -2,22 +2,47 @@
 
 ## 📁 Project Structure
 
-**Src Files**
-- **`cleaning.py`**: Loads OHSU/TARGET expression and mapping tables, fixes orientation, maps Entrez→HUGO symbols, matches genes, applies variance filtering, log2-transforms and scales data, and saves `X_ohsu.npy`, `X_target.npy`, `ohsu_cleaned_expression.csv`, and `target_cleaned_expression.csv`. Run: `python src/cleaning.py`.
+**Src Files** (execution order for a full pipeline):
 
-- **`fusions.py`**: Exploratory script that inspects the clinical TSV (`aml_ohsu_2022_clinical_data.tsv`) to list and count fusion-like labels (helpful for label curation). Run: `python src/fusions.py`.
+1. **`cleaning.py`**: ingest OHSU/TARGET expression, map Entrez→HUGO, align genes, apply variance filter, log2 + scaling, save cleaned matrices.
+   - output: `cleaned/ohsu_cleaned_expression.csv`, `cleaned/target_cleaned_expression.csv`, `cleaned/X_ohsu.npy`, `cleaned/X_target.npy`.
+   - run: `python src/cleaning.py`
 
-- **`eln_classifier.py`**: Trains a ridge (L2) logistic regression to predict ELN favourable vs adverse using `cleaned/X_ohsu.npy` and `cleaned/ohsu_favorable_labels.npy`. Evaluates performance and saves `models/ridge_eln_model.joblib` and `models/ridge_scaler.joblib`. Run: `python src/eln_classifier.py`.
+2. **`eln_classifier.py`**: train ridge logistic regression on OHSU with ELN labels, save model and scaler.
+   - input: `cleaned/X_ohsu.npy`, `cleaned/ohsu_favorable_labels.npy`
+   - output: `models/ridge_eln_model.joblib`, `models/ridge_scaler.joblib`
+   - run: `python src/eln_classifier.py`
 
-- **`predict_target.py`**: Loads `cleaned/X_target.npy`, the trained ELN model and scaler from `models/`, predicts ELN favourable probabilities for TARGET samples, and writes `results/TARGET_ELN_predictions.csv`. Run: `python src/predict_target.py`.
+3. **`predict_oshu.py`**: apply trained model to OHSU 2018 cohort for validation.
+   - input: `cleaned/X_validata.npy`, `models/*`
+   - output: `results/OHSU_favourable_fusion_predictions.csv`
+   - run: `python src/predict_oshu.py`
 
-- **`predict_tcga.py`**: Loads `cleaned/X_tcga.npy`, the trained ELN model and scaler from `models/`, predicts ELN favourable probabilities for TCGA samples, and writes `results/TCGA_ELN_predictions.csv`. Run: `python src/predict_tcga.py`.
+4. **`predict_target.py`**: apply trained model to TARGET cohort.
+   - input: `cleaned/X_target.npy`, `models/*`
+   - output: `results/TARGET_favourable_fusion_predictions.csv`
+   - run: `python src/predict_target.py`
 
-- **`target_fusion.py`**: Performs fusion type inference for TARGET samples using expression patterns and writes `results/fusion_inference/TARGET_fusion_inference.csv`. Run: `python src/target_fusion.py`.
+5. **`predict_tcga.py`**: apply trained model to TCGA cohort.
+   - input: `cleaned/X_tcga.npy`, `models/*`
+   - output: `results/TCGA_favourable_fusion_predictions.csv`
+   - run: `python src/predict_tcga.py`
 
-- **`top_genes.py`**: Extracts and ranks top genes by model importance and expression patterns across datasets, generating `results/TARGET_top_genes.csv`, `results/TCGA_top_genes.csv`, and fusion-specific gene lists. Run: `python src/top_genes.py`.
+6. **`target_fusion.py`**: run fusion program inference pipeline for TARGET/TCGA.
+   - output: `results/fusion_inference/TARGET_fusion_inference.csv`
+   - run: `python src/target_fusion.py`
 
-- **`validation.py`**: Evaluates model performance on TCGA data using cytogenetics-derived ELN labels. Generates ROC curves, precision-recall curves, confusion matrices, and calibration plots in `results/tcga_validation/`. Run: `python src/validation.py`.
+7. **`top_genes.py`**: analyze top gene expression differences and model coefficients for OHSU/TCGA/TARGET and VALIDATA (OHSU 2018), output CSVs and figures.
+   - output:
+     - `results/OHSU_2022_top_genes.csv`, `results/OHSU_2018_top_genes.csv`, `results/TCGA_top_genes.csv`, `results/TARGET_top_genes.csv`
+     - gene overlap files + plots in `results/figures`
+   - run: `python src/top_genes.py`
+
+8. **`validation.py`**: benchmark the model on TCGA using cytogenetics-derived labels.
+   - output: ROC/PR/confusion/calibration plots in `results/tcga_validation/`
+   - run: `python src/validation.py`
+
+---
 
 
 ## ⚙️ Environment Setup (Conda)
