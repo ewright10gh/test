@@ -56,12 +56,12 @@ def assign_fusion(label):
 clinical["fusion_class"] = clinical["Cancer Type Detailed"].apply(assign_fusion)
 
 # =========================
-# 4. CREATE BINARY ELN LABELS
+# 4. CREATE BINARY FAVOURABLE FUSION LABELS
 # =========================
 favorable_fusions = ["PML_RARA", "RUNX1_RUNX1T1", "CBFB_MYH11"]
 y = clinical["fusion_class"].isin(favorable_fusions).astype(int)
 
-print("\nBinary label distribution (1 = favorable):")
+print("\nBinary label distribution (1 = favourable fusion):")
 print(y.value_counts())
 
 # =========================

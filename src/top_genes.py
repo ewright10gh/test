@@ -18,8 +18,8 @@ TCGA_EXPR = os.path.join(BASE, "cleaned", "tcga_cleaned_expression.csv")
 TARGET_EXPR = os.path.join(BASE, "cleaned", "target_cleaned_expression.csv")
 
 OHSU_LABELS = os.path.join(BASE, "cleaned", "ohsu_favorable_labels.csv")
-TCGA_PRED = os.path.join(BASE, "results", "TCGA_ELN_predictions.csv")
-TARGET_PRED = os.path.join(BASE, "results", "TARGET_ELN_predictions.csv")
+TCGA_PRED = os.path.join(BASE, "results", "TCGA_favourable_fusion_predictions.csv")
+TARGET_PRED = os.path.join(BASE, "results", "TARGET_favourable_fusion_predictions.csv")
 
 OUTDIR = os.path.join(BASE, "results")
 os.makedirs(OUTDIR, exist_ok=True)
@@ -90,7 +90,7 @@ top_ohsu.to_csv(
 
 print("Computing TCGA stats...")
 
-tcga_stats = compute_stats(tcga, tcga_pred["ELN_predicted"])
+tcga_stats = compute_stats(tcga, tcga_pred["favourable_fusion_predicted"])
 
 top_tcga = tcga_stats.sort_values("mean_diff", ascending=False).head(50)
 
@@ -106,7 +106,7 @@ top_tcga.to_csv(
 
 print("Computing TARGET stats...")
 
-target_stats = compute_stats(target, target_pred["ELN_predicted_class"])
+target_stats = compute_stats(target, target_pred["favourable_fusion_predicted_class"])
 
 top_target = target_stats.sort_values("mean_diff", ascending=False).head(50)
 

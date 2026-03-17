@@ -2,16 +2,20 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
+from sklearn.metrics.pairwise import cosine_similarity
 
-st.set_page_config(page_title="AML ELN Predictor", layout="wide")
+st.set_page_config(page_title="AML Favourable Fusion Predictor", layout="wide")
 
-st.title("AML Transcriptomic Risk Classifier")
+st.title("AML Transcriptomic Favourable Fusion Classifier")
 
 st.write(
 """
-Upload a **TARGET-style RNA-seq TPM file** to predict ELN favourable AML risk.
+Upload a **TARGET/TCGA/OHSU RNA-seq expression matrix** to predict favourable fusion vs no favourable fusion.
 
-The uploaded dataset replaces the TARGET dataset used in the analysis.
+Supported formats:
+- TARGET TPM (Entrez IDs)
+- TCGA RSEM (gene|entrez union IDs)
+- OHSU RPKM (HUGO symbols)
 """
 )
 
@@ -30,13 +34,37 @@ def load_model():
 model, scaler = load_model()
 
 # -----------------------------
-# LOAD OHSU CLEANED GENE LIST
+# LOAD OHSU CLEANED GENE LIST + FUSION CENTROIDS
 # -----------------------------
 
 ohsu_clean = pd.read_csv(
     "cleaned/ohsu_cleaned_expression.csv",
     index_col=0
 )
+
+# Build fusion centroids using OHSU clinical labels
+ohsu_clin = pd.read_csv(
+    "aml_ohsu_2022_clinical_data.tsv",
+    sep="\t",
+    low_memory=False
+).set_index("Sample ID")
+
+ohsu_clin = ohsu_clin.loc[ohsu_clean.index]
+
+fusion_series = ohsu_clin["Cancer Type Detailed"].astype(str).str.upper()
+
+fusion_group = pd.Series("OTHER", index=ohsu_clean.index)
+fusion_group[fusion_series.str.contains("PML-RARA", na=False)] = "PML_RARA"
+fusion_group[fusion_series.str.contains("RUNX1-RUNX1T1", na=False)] = "RUNX1_RUNX1T1"
+fusion_group[fusion_series.str.contains("CBFB-MYH11", na=False)] = "CBFB_MYH11"
+
+centroid_dict = {}
+for fusion in ["PML_RARA", "RUNX1_RUNX1T1", "CBFB_MYH11"]:
+    subset = ohsu_clean[fusion_group == fusion]
+    if len(subset):
+        centroid_dict[fusion] = subset.mean()
+
+centroids = pd.DataFrame(centroid_dict)
 
 model_genes = ohsu_clean.columns
 
@@ -53,7 +81,7 @@ threshold = st.slider(
     "Favourable probability threshold",
     0.5,
     0.9,
-    0.6
+    0.66
 )
 
 if uploaded is not None:
@@ -104,6 +132,10 @@ if uploaded is not None:
         dataset_type = "TARGET"
 
     else:
+        dataset_type = "OHSU"  # includes RPKM/OHSU-style gene symbols
+
+    # Explicit fallback for Hugo_Symbol index (RPKM data_mrna_seq_rpkm style)
+    if target.index.name and "hugo" in str(target.index.name).lower():
         dataset_type = "OHSU"
 
     st.write("Detected dataset type:", dataset_type)
@@ -168,7 +200,11 @@ if uploaded is not None:
     # LOG TRANSFORM
     # -----------------------------
 
-    target = np.log2(target + 1)
+    if dataset_type in ["TARGET", "TCGA"]:
+        target = np.log2(target + 1)
+        st.write("Applied log2(x+1) transform (TARGET/TCGA)")
+    else:
+        st.write("No log transform applied (OHSU/RPKM)")
 
 
     # -----------------------------
@@ -226,15 +262,49 @@ if uploaded is not None:
     # -----------------------------
 
     prob = model.predict_proba(X)[:,1]
-    pred = np.where(prob >= threshold, "Favourable", "Non-favourable")
+    pred = np.where(prob >= threshold, "Favourable fusion", "No favourable fusion")
 
     results = pd.DataFrame({
 
         "Sample_ID": target.index,
-        "ELN_probability": prob,
-        "ELN_predicted_class": pred
+        "favourable_fusion_probability": prob,
+        "favourable_fusion_predicted_class": pred
 
     })
+
+    # -------------------------------------------------
+    # FUSION INFERENCE FOR FAVOURABLE SAMPLES
+    # -------------------------------------------------
+
+    fusion_program = pd.Series("No favourable fusion", index=results.index)
+
+    fav_mask = results["favourable_fusion_predicted_class"] == "Favourable fusion"
+    fav_samples = results.loc[fav_mask, "Sample_ID"]
+
+    if len(fav_samples) > 0 and not centroids.empty:
+        fav_expr = target.loc[fav_samples]
+
+        common_genes = fav_expr.columns.intersection(centroids.index)
+        if len(common_genes) > 0:
+            fav_expr = fav_expr[common_genes]
+            cent = centroids.loc[common_genes]
+
+            sim = cosine_similarity(fav_expr, cent.T)
+            sim_df = pd.DataFrame(
+                sim,
+                index=fav_expr.index,
+                columns=centroids.columns
+            )
+
+            pred_fusion = sim_df.idxmax(axis=1)
+            fusion_program.loc[fav_mask] = pred_fusion.values
+        else:
+            st.warning("No overlapping genes between upload and fusion centroids; fusion program inference skipped.")
+    else:
+        if len(fav_samples) == 0:
+            st.info("No favourable-fusion samples were predicted, so fusion-type inference is skipped.")
+
+    results["favourable_fusion_program"] = fusion_program
 
     st.subheader("Prediction Results")
 
@@ -246,7 +316,19 @@ if uploaded is not None:
 
     st.subheader("Prediction counts")
 
-    st.write(results["ELN_predicted_class"].value_counts())
+    pred_counts = results["favourable_fusion_predicted_class"].value_counts()
+    st.write(pred_counts)
+
+    # Show total favourable fusion count and fusion-type breakdown
+    fav_count = int(pred_counts.get("Favourable fusion", 0))
+    st.write(f"Total favourable fusion samples: {fav_count}")
+
+    fusion_counts = results.loc[results["favourable_fusion_program"] != "No favourable fusion", "favourable_fusion_program"].value_counts()
+    if len(fusion_counts) > 0:
+        st.write("Favourable fusion breakdown by inferred program:")
+        st.write(fusion_counts)
+    else:
+        st.info("No fusion program inferred for favourable fusion samples.")
 
     # -----------------------------
     # DOWNLOAD
@@ -257,18 +339,18 @@ if uploaded is not None:
     st.download_button(
         "Download predictions",
         csv,
-        "eln_predictions.csv",
+        "favourable_fusion_predictions.csv",
         "text/csv"
     )
     # ----------------------------------------
     # MODEL INTERPRETATION
     # ----------------------------------------
 
-    st.subheader("Genes driving ELN predictions")
+    st.subheader("Genes driving favourable fusion predictions (dataset-specific)")
 
     import matplotlib.pyplot as plt
 
-    # load ridge coefficients
+    # load ridge coefficients (global model)
     coefs = pd.read_csv(
         "cleaned/ridge_feature_importance.csv",
         index_col=0
@@ -276,17 +358,36 @@ if uploaded is not None:
 
     coefs.columns = ["Coefficient"]
 
-    # top genes
-    top_fav = coefs.sort_values("Coefficient", ascending=False).head(5)
-    top_adv = coefs.sort_values("Coefficient", ascending=True).head(5)
+    # compute dataset-specific mean expression stratified by prediction
+    fav_samples = results[results["favourable_fusion_predicted_class"] == "Favourable fusion"]["Sample_ID"]
+    nonfav_samples = results[results["favourable_fusion_predicted_class"] == "No favourable fusion"]["Sample_ID"]
 
-    interpret_table = pd.concat([top_fav, top_adv])
+    fav_expr = target.loc[fav_samples]
+    nonfav_expr = target.loc[nonfav_samples]
 
-    interpret_table["Direction"] = [
-        "Favourable"] * 5 + ["Non-favourable"] * 5
+    # handle empty classes safely
+    if fav_expr.shape[0] == 0 or nonfav_expr.shape[0] == 0:
+        st.warning("Not enough class diversity to compute dataset-specific top genes.")
+        fav_expr = target
+        nonfav_expr = target
 
-    interpret_table = interpret_table.reset_index()
-    interpret_table.columns = ["Gene","Coefficient","Associated risk"]
+    stats = pd.DataFrame({
+        "Favourable_mean": fav_expr.mean(),
+        "No_favourable_mean": nonfav_expr.mean(),
+    })
+    stats["mean_diff"] = stats["Favourable_mean"] - stats["No_favourable_mean"]
+
+    # join with coefficients
+    stats = stats.join(coefs, how="left")
+
+    top_fav = stats.sort_values("mean_diff", ascending=False).head(5).reset_index()
+    top_nonfav = stats.sort_values("mean_diff", ascending=True).head(5).reset_index()
+
+    interpret_table = pd.concat([top_fav, top_nonfav], ignore_index=True)
+    interpret_table["Associated risk"] = ["Favourable fusion"] * len(top_fav) + ["No favourable fusion"] * len(top_nonfav)
+
+    interpret_table = interpret_table[["index", "Coefficient", "mean_diff", "Associated risk"]]
+    interpret_table.columns = ["Gene", "Coefficient", "Mean expression difference (fav - nonfav)", "Associated risk"]
 
     # show table
     st.dataframe(interpret_table)
@@ -309,7 +410,7 @@ if uploaded is not None:
     ax.axvline(0, color="black", linewidth=1)
 
     ax.set_xlabel("Model coefficient")
-    ax.set_title("Top genes driving AML ELN risk predictions")
+    ax.set_title("Top genes driving favourable fusion predictions")
 
     plt.tight_layout()
 

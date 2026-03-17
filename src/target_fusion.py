@@ -13,10 +13,13 @@ OHSU_EXPR = os.path.join(BASE,"cleaned","ohsu_cleaned_expression.csv")
 OHSU_CLIN = os.path.join(BASE,"aml_ohsu_2022_clinical_data.tsv")
 
 TCGA_EXPR = os.path.join(BASE,"cleaned","tcga_cleaned_expression.csv")
-TCGA_PRED = os.path.join(BASE,"results","TCGA_ELN_predictions.csv")
+TCGA_PRED = os.path.join(BASE,"results","TCGA_favourable_fusion_predictions.csv")
 
 TARGET_EXPR = os.path.join(BASE,"cleaned","target_cleaned_expression.csv")
-TARGET_PRED = os.path.join(BASE,"results","TARGET_ELN_predictions.csv")
+TARGET_PRED = os.path.join(BASE,"results","TARGET_favourable_fusion_predictions.csv")
+
+VALIDATA_EXPR = os.path.join(BASE,"cleaned","validata_cleaned_expression.csv")
+VALIDATA_PRED = os.path.join(BASE,"results","validata_favourable_fusion_predictions.csv")
 
 OUTDIR = os.path.join(BASE,"results","fusion_inference")
 os.makedirs(OUTDIR,exist_ok=True)
@@ -43,6 +46,12 @@ target_expr = pd.read_csv(TARGET_EXPR,index_col=0)
 
 print("Loading TARGET predictions...")
 target_pred = pd.read_csv(TARGET_PRED,index_col=0)
+
+print("Loading VALIDATA expression...")
+validata_expr = pd.read_csv(VALIDATA_EXPR,index_col=0)
+
+print("Loading VALIDATA predictions...")
+validata_pred = pd.read_csv(VALIDATA_PRED,index_col=0)
 
 # -------------------------------------------------
 # ALIGN OHSU
@@ -126,7 +135,7 @@ def infer_fusion(expr, pred, dataset_name):
     # SELECT FAVOURABLE SAMPLES
     # -----------------------------
 
-    fav_mask = pred[prob_col] > 0.7
+    fav_mask = pred[prob_col] > 0.675
     fav_expr = expr.loc[fav_mask]
 
     print(dataset_name, "favourable samples:", fav_expr.shape[0])
@@ -189,5 +198,7 @@ def infer_fusion(expr, pred, dataset_name):
 tcga_results = infer_fusion(tcga_expr,tcga_pred,"TCGA")
 
 target_results = infer_fusion(target_expr,target_pred,"TARGET")
+
+validata_results = infer_fusion(validata_expr,validata_pred,"VALIDATA")
 
 print("\nDone.")

@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 # 1. LOAD DATA
 
 ohsu = pd.read_csv(r"C:\Users\mba22ew\test\data_mrna_seq_rpkm.txt", sep="\t", index_col=0)
+validata = pd.read_csv(r"C:\Users\mba22ew\test\validata_mrna_seq_rpkm.txt", sep="\t", index_col=0)
 target = pd.read_csv(r"C:\Users\mba22ew\test\data_mrna_seq_tpm.txt", sep="\t", index_col=0)
 tcga = pd.read_csv(r"C:\Users\mba22ew\test\data_mrna_seq_v2_rsem.txt", sep="\t", index_col=0)
 mapping = pd.read_csv(r"C:\Users\mba22ew\test\hgnc_complete_set.txt", sep="\t", low_memory=False)
@@ -25,11 +26,13 @@ def transpose_if_needed(df):
     return df
 
 ohsu = transpose_if_needed(ohsu)
+validata = transpose_if_needed(validata)
 target = transpose_if_needed(target)
 tcga = transpose_if_needed(tcga)
 
 print("\nAfter transpose:")
 print("OHSU:", ohsu.shape)
+print("VALIDATA:", validata.shape)
 print("TARGET:", target.shape)
 print("TCGA:", tcga.shape)
 
@@ -52,6 +55,21 @@ target = target.T.groupby(level=0).mean().T
 
 print("\nTARGET after gene mapping:", target.shape)
 
+# Apply same step for VALIDATA (Entrez->Symbol mapping only when needed)
+validata.columns = validata.columns.astype(str)
+validata_entrez_mapped = validata.columns.map(entrez_to_symbol)
+# If many columns map by Entrez, assume Entrez-based input and replace; else keep current symbols
+if validata_entrez_mapped.notna().sum() >= max(1, int(len(validata.columns) * 0.25)):
+    validata.columns = validata_entrez_mapped
+    validata = validata.loc[:, validata.columns.notna()]
+    validata = validata.T.groupby(level=0).mean().T
+    print("\nVALIDATA after Entrez->Symbol mapping:", validata.shape)
+else:
+    # Assume VALIDATA is already symbol-based
+    validata = validata.loc[:, validata.columns.notna()]
+    validata = validata.T.groupby(level=0).mean().T
+    print("\nVALIDATA assumed HUGO symbol format (no mapping applied):", validata.shape)
+
 
 # 4. MATCH GENES ACROSS ALL DATASETS
 
@@ -68,11 +86,12 @@ def collapse_duplicates(df):
     return df
 
 ohsu = collapse_duplicates(ohsu)
+validata = collapse_duplicates(validata)
 target = collapse_duplicates(target)
 tcga = collapse_duplicates(tcga)
 
 # recompute intersection in case collapsing changed counts
-common_genes = ohsu.columns.intersection(target.columns).intersection(tcga.columns)
+common_genes = ohsu.columns.intersection(target.columns).intersection(tcga.columns).intersection(validata.columns)
 print("\nCommon genes:", len(common_genes))
 
 if len(common_genes) == 0:
@@ -80,6 +99,7 @@ if len(common_genes) == 0:
 
 # Subset datasets to common genes
 ohsu = ohsu[common_genes]
+validata = validata[common_genes]
 target = target[common_genes]
 tcga = tcga[common_genes]
 
@@ -92,11 +112,12 @@ def numeric_clean(df):
     return df
 
 ohsu = numeric_clean(ohsu)
+validata = numeric_clean(validata)
 target = numeric_clean(target)
 tcga = numeric_clean(tcga)
 
 # report duplicates that might cause mismatched column numbers later
-for name, df in [('OHSU', ohsu), ('TARGET', target), ('TCGA', tcga)]:
+for name, df in [('OHSU', ohsu), ('VALIDATA', validata), ('TARGET', target), ('TCGA', tcga)]:
     total = len(df.columns)
     unique = df.columns.nunique()
     dup = df.columns[df.columns.duplicated()].unique()
@@ -117,7 +138,7 @@ gene_variance = ohsu.var(axis=0)
 high_var_genes = gene_variance[gene_variance > 1].index
 
 # Intersect with other datasets to ensure all contain the same high-variance genes
-high_var_genes = high_var_genes.intersection(target.columns).intersection(tcga.columns)
+high_var_genes = high_var_genes.intersection(target.columns).intersection(tcga.columns).intersection(validata.columns)
 print("Genes passing variance filter in all datasets:", len(high_var_genes))
 
 if len(high_var_genes) < 50:
@@ -125,11 +146,12 @@ if len(high_var_genes) < 50:
 
 # Subset all datasets to high-variance genes
 ohsu = ohsu[high_var_genes]
+validata = validata[high_var_genes]
 target = target[high_var_genes]
 tcga = tcga[high_var_genes]
 
 # --- sanity check: sometimes indexing quirks or dtypes can leave mismatches ---
-common_after = ohsu.columns.intersection(target.columns).intersection(tcga.columns)
+common_after = ohsu.columns.intersection(target.columns).intersection(tcga.columns).intersection(validata.columns)
 if len(common_after) != len(high_var_genes):
     print(f"WARNING: {len(high_var_genes) - len(common_after)} genes dropped when re-checking intersections")
     high_var_genes = common_after
@@ -143,15 +165,17 @@ print("Genes retained after final intersection:", len(high_var_genes))
 # 8. LOCK COLUMN ORDER (sort alphabetically)
 
 ohsu = ohsu.sort_index(axis=1)
+validata = validata[ohsu.columns]
 target = target[ohsu.columns]
 tcga = tcga[ohsu.columns]
 
 # Verify
 print("\nAfter variance filter:")
 print("OHSU:", ohsu.shape)
+print("VALIDATA:", validata.shape)
 print("TARGET:", target.shape)
 print("TCGA:", tcga.shape)
-assert (ohsu.columns == target.columns).all() and (ohsu.columns == tcga.columns).all(), "Column mismatch!"
+assert (ohsu.columns == validata.columns).all() and (ohsu.columns == target.columns).all() and (ohsu.columns == tcga.columns).all(), "Column mismatch!"
 
 print("✅ Column order identical across all datasets")
 
@@ -160,6 +184,7 @@ print("✅ Column order identical across all datasets")
 
 scaler = StandardScaler()
 X_ohsu = scaler.fit_transform(ohsu)
+X_validata = scaler.transform(validata)
 X_target = scaler.transform(target)
 X_tcga = scaler.transform(tcga)
 
@@ -171,10 +196,12 @@ out_dir = "cleaned"
 os.makedirs(out_dir, exist_ok=True)
 
 np.save(os.path.join(out_dir, "X_ohsu.npy"), X_ohsu)
+np.save(os.path.join(out_dir, "X_validata.npy"), X_validata)
 np.save(os.path.join(out_dir, "X_target.npy"), X_target)
 np.save(os.path.join(out_dir, "X_tcga.npy"), X_tcga)
 
 ohsu.to_csv(os.path.join(out_dir, "ohsu_cleaned_expression.csv"))
+validata.to_csv(os.path.join(out_dir, "validata_cleaned_expression.csv"))
 target.to_csv(os.path.join(out_dir, "target_cleaned_expression.csv"))
 tcga.to_csv(os.path.join(out_dir, "tcga_cleaned_expression.csv"))
 

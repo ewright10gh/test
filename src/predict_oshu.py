@@ -2,36 +2,32 @@ import pandas as pd
 import numpy as np
 import joblib
 
-
 # LOAD MODEL
-
 model = joblib.load(r"C:\Users\mba22ew\test\models\ridge_eln_model.joblib")
 scaler = joblib.load(r"C:\Users\mba22ew\test\models\ridge_scaler.joblib")
 
 print("Model + scaler loaded")
 
-
-# LOAD TCGA EXPRESSION
-
+# LOAD OHSU VALIDATION EXPRESSION
 X = pd.read_csv(
-    r"C:\Users\mba22ew\test\cleaned\tcga_cleaned_expression.csv",
+    r"C:\Users\mba22ew\test\cleaned\validata_cleaned_expression.csv",
     index_col=0
 )
 
-# remove metadata row if present
-X = X[~X.index.str.contains("Entrez", case=False, na=False)]
-
 print("Expression matrix shape:", X.shape)
 
-
 # SCALE USING TRAINING SCALER
-
 X_scaled = scaler.transform(X.values)
 
+# HANDLE NaN ENTRIES (rare due to missing/dropped genes)
+nan_rows = np.isnan(X_scaled).any(axis=1)
+if nan_rows.any():
+    print(f"Warning: dropping {nan_rows.sum()} samples with NaN after scaling")
+    X = X.loc[~nan_rows]
+    X_scaled = X_scaled[~nan_rows]
 
 # PREDICT
-
-probs = model.predict_proba(X_scaled)[:,1]
+probs = model.predict_proba(X_scaled)[:, 1]
 
 results = pd.DataFrame({
     "Sample_ID": X.index,
@@ -43,9 +39,7 @@ results["favourable_fusion_predicted"] = (results["favourable_fusion_probability
 print("\nPrediction summary:")
 print(results["favourable_fusion_predicted"].value_counts())
 
-
 # SAVE RESULTS
+results.to_csv(r"C:\Users\mba22ew\test\results\validata_favourable_fusion_predictions.csv", index=False)
 
-results.to_csv(r"C:\Users\mba22ew\test\results\tcga_favourable_fusion_predictions.csv", index=False)
-
-print("\n✅ TCGA predictions saved")
+print("\n✅ VALIDATA predictions saved")
