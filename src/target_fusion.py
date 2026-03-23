@@ -3,25 +3,27 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-BASE = r"C:\Users\mba22ew\test"
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
 
 # -------------------------------------------------
 # FILE PATHS
 # -------------------------------------------------
 
-OHSU_EXPR = os.path.join(BASE,"cleaned","ohsu_cleaned_expression.csv")
-OHSU_CLIN = os.path.join(BASE,"aml_ohsu_2022_clinical_data.tsv")
+OHSU_EXPR = os.path.join(parent_dir, "cleaned", "ohsu_cleaned_expression.csv")
+OHSU_CLIN = os.path.join(parent_dir, "aml_ohsu_2022_clinical_data.tsv")
 
-TCGA_EXPR = os.path.join(BASE,"cleaned","tcga_cleaned_expression.csv")
-TCGA_PRED = os.path.join(BASE,"results","TCGA_favourable_fusion_predictions.csv")
+TCGA_EXPR = os.path.join(parent_dir, "cleaned", "tcga_cleaned_expression.csv")
+TCGA_PRED = os.path.join(parent_dir, "results", "TCGA_favourable_fusion_predictions.csv")
 
-TARGET_EXPR = os.path.join(BASE,"cleaned","target_cleaned_expression.csv")
-TARGET_PRED = os.path.join(BASE,"results","TARGET_favourable_fusion_predictions.csv")
+TARGET_EXPR = os.path.join(parent_dir, "cleaned", "target_cleaned_expression.csv")
+TARGET_PRED = os.path.join(parent_dir, "results", "TARGET_favourable_fusion_predictions.csv")
 
-VALIDATA_EXPR = os.path.join(BASE,"cleaned","validata_cleaned_expression.csv")
-VALIDATA_PRED = os.path.join(BASE,"results","validata_favourable_fusion_predictions.csv")
+VALIDATA_EXPR = os.path.join(parent_dir,"cleaned","validata_cleaned_expression.csv")
+VALIDATA_PRED = os.path.join(parent_dir,"results","validata_favourable_fusion_predictions.csv")
 
-OUTDIR = os.path.join(BASE,"results","fusion_inference")
+OUTDIR = os.path.join(parent_dir,"results","fusion_inference")
 os.makedirs(OUTDIR,exist_ok=True)
 
 # -------------------------------------------------

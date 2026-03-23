@@ -6,11 +6,15 @@ from sklearn.preprocessing import StandardScaler
 
 # 1. LOAD DATA
 
-ohsu = pd.read_csv(r"C:\Users\mba22ew\test\data_mrna_seq_rpkm.txt", sep="\t", index_col=0)
-validata = pd.read_csv(r"C:\Users\mba22ew\test\validata_mrna_seq_rpkm.txt", sep="\t", index_col=0)
-target = pd.read_csv(r"C:\Users\mba22ew\test\data_mrna_seq_tpm.txt", sep="\t", index_col=0)
-tcga = pd.read_csv(r"C:\Users\mba22ew\test\data_mrna_seq_v2_rsem.txt", sep="\t", index_col=0)
-mapping = pd.read_csv(r"C:\Users\mba22ew\test\hgnc_complete_set.txt", sep="\t", low_memory=False)
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
+
+ohsu = pd.read_csv(os.path.join(parent_dir, "data_mrna_seq_rpkm.txt"), sep="\t", index_col=0)
+validata = pd.read_csv(os.path.join(parent_dir, "validata_mrna_seq_rpkm.txt"), sep="\t", index_col=0)
+target = pd.read_csv(os.path.join(parent_dir, "data_mrna_seq_tpm.txt"), sep="\t", index_col=0)
+tcga = pd.read_csv(os.path.join(parent_dir, "data_mrna_seq_v2_rsem.txt"), sep="\t", index_col=0)
+mapping = pd.read_csv(os.path.join(parent_dir, "hgnc_complete_set.txt"), sep="\t", low_memory=False)
 
 print("Original shapes:")
 print("OHSU:", ohsu.shape)
@@ -192,7 +196,7 @@ X_tcga = scaler.transform(tcga)
 # 10. SAVE
 
 # ensure output directory exists
-out_dir = "cleaned"
+out_dir = os.path.join(parent_dir, "cleaned")
 os.makedirs(out_dir, exist_ok=True)
 
 np.save(os.path.join(out_dir, "X_ohsu.npy"), X_ohsu)

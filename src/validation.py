@@ -1,7 +1,11 @@
 import pandas as pd
 from sklearn.metrics import classification_report, roc_auc_score
-
+import os
 import matplotlib.pyplot as plt
+
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
 
 # =========================
 
@@ -9,7 +13,7 @@ import matplotlib.pyplot as plt
 
 # =========================
 
-results = pd.read_csv(r"C:\Users\mba22ew\test\results\tcga_favourable_fusion_predictions.csv")
+results = pd.read_csv(os.path.join(parent_dir, "results", "tcga_favourable_fusion_predictions.csv"))
 
 print("Predictions loaded:", results.shape)
 
@@ -20,9 +24,9 @@ print("Predictions loaded:", results.shape)
 # =========================
 
 clinical = pd.read_csv(
-r"C:\Users\mba22ew\test\laml_tcga_pub_clinical_data.tsv",
-sep="\t",
-low_memory=False
+    os.path.join(parent_dir, "laml_tcga_pub_clinical_data.tsv"),
+    sep="\t",
+    low_memory=False
 )
 
 print("Clinical loaded:", clinical.shape)
@@ -98,9 +102,9 @@ else:
 # VALIDATA VALIDATION
 # =========================
 
-validata_results = pd.read_csv(r"C:\Users\mba22ew\test\results\validata_favourable_fusion_predictions.csv")
+validata_results = pd.read_csv(os.path.join(parent_dir, "results", "validata_favourable_fusion_predictions.csv"))
 validata_clinical = pd.read_csv(
-    r"C:\Users\mba22ew\test\aml_ohsu_2018_clinical_data.tsv",
+    os.path.join(parent_dir, "aml_ohsu_2018_clinical_data.tsv"),
     sep="\t",
     low_memory=False
 )
@@ -201,11 +205,11 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import precision_recall_curve, average_precision_score
 
 # load predictions
-results = pd.read_csv(r"C:\Users\mba22ew\test\results\tcga_favourable_fusion_predictions.csv")
+results = pd.read_csv(os.path.join(parent_dir, "results", "tcga_favourable_fusion_predictions.csv"))
 
 # load clinical
 clinical = pd.read_csv(
-    r"C:\Users\mba22ew\test\laml_tcga_pub_clinical_data.tsv",
+    os.path.join(parent_dir, "laml_tcga_pub_clinical_data.tsv"),
     sep="\t",
     low_memory=False
 )

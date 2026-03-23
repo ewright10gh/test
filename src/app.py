@@ -4,20 +4,44 @@ import numpy as np
 import joblib
 from sklearn.metrics.pairwise import cosine_similarity
 
-st.set_page_config(page_title="AML Favourable Fusion Predictor", layout="wide")
-
-st.title("AML Transcriptomic Favourable Fusion Classifier")
-
-st.write(
-"""
-Upload a **TARGET/TCGA/OHSU RNA-seq expression matrix** to predict favourable fusion vs no favourable fusion.
-
-Supported formats:
-- TARGET TPM (Entrez IDs)
-- TCGA RSEM (gene|entrez union IDs)
-- OHSU RPKM (HUGO symbols)
-"""
+st.set_page_config(
+    page_title="AML Favourable Fusion Predictor",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# Custom CSS for enhanced purple styling
+st.markdown("""
+    <style>
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .stTabs [data-baseweb="tab-list"] button {
+        background-color: #EDE9FE;
+    }
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        background-color: #8B5CF6;
+        color: white;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("🧬 AML Favourable Fusion Predictor")
+
+st.markdown("""
+<div style="background-color: #EDE9FE; padding: 20px; border-radius: 10px; border-left: 4px solid #8B5CF6;">
+    <h3 style="color: #6D28D9; margin-top: 0;">Upload RNA-seq Expression Data</h3>
+    <p>Predict <b>favourable fusion</b> vs <b>no favourable fusion</b> using transcriptomic data.</p>
+    
+    **Supported formats:**
+    - 📊 TARGET TPM (Entrez IDs)
+    - 📈 TCGA RSEM (gene|entrez union IDs)  
+    - 📉 OHSU RPKM (HUGO symbols)
+</div>
+""", unsafe_allow_html=True)
+
+
 
 # -----------------------------
 # LOAD TRAINED MODEL
@@ -416,25 +440,56 @@ if uploaded is not None:
 
     st.pyplot(fig)
 
+
+
+    
+
 else:
-    st.info("Please upload a file to get started.")
+    st.info("👋 Please upload a file to get started!")
 
-# -----------------------------
-# SIDEBAR INFO
-# -----------------------------
+# SIDEBAR - Help and Info
+with st.sidebar:
+    st.markdown("---")
+    st.subheader("📖 Input Format Guide")
+    
+    st.markdown("""
+    **Expected Input Format:**
+    
+    A tab-separated expression matrix where:
+    - **Rows** = Samples
+    - **Columns** = Genes  
+    - **Values** = Expression levels (TPM/RSEM/RPKM)
+    
+    **Supported Formats:**
+    - 🎯 **TARGET TPM**: Gene IDs as Entrez numbers
+    - 🔬 **TCGA RSEM**: Format like `GENENAME|12345`
+    - 📊 **OHSU RPKM**: Gene symbols (HUGO)
+    
+    **Example File Structure:**
+    ```
+    Sample_ID    TP53    BRCA1    MYC    ...
+    Sample_001   145.2   98.3     234.1  ...
+    Sample_002   203.5   112.4    187.9  ...
+    ...
+    ```
+    """)
+    
+    st.markdown("---")
+    st.subheader("⚙️ How It Works")
+    
+    st.markdown("""
+    1. **Upload** your RNA-seq expression file
+    2. **Automatic Detection** of dataset type
+    3. **Gene Harmonization** to model genes
+    4. **Normalization** and scaling
+    5. **Prediction** using Ridge+ELN model
+    6. **Fusion Inference** for positive samples
+    
+    The model predicts the likelihood of a **favourable fusion** event based on 
+    the transcriptomic profile.
+    """)
+    
+    st.markdown("---")
+    st.subheader("❓ Questions?")
+    st.markdown("Detailed results and gene importance analysis are provided after prediction.")
 
-st.sidebar.write(
-"""
-### Expected input
-
-A **TARGET TPM expression matrix**
-
-Format:
-
-- tab separated
-- rows = samples
-- columns = genes
-- values = TPM
-
-Example file:
-""")

@@ -10,24 +10,25 @@ matplotlib.use('Agg')  # Use non-GUI backend
 import matplotlib.pyplot as plt
 from joblib import load
 
-
-BASE = r"C:\Users\mba22ew\test"
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
 
 # 2022 OHSU (training cohort)
-OHSU_EXPR = os.path.join(BASE, "cleaned", "ohsu_cleaned_expression.csv")
-OHSU_LABELS = os.path.join(BASE, "cleaned", "ohsu_favorable_labels.csv")
+OHSU_EXPR = os.path.join(parent_dir, "cleaned", "ohsu_cleaned_expression.csv")
+OHSU_LABELS = os.path.join(parent_dir, "cleaned", "ohsu_favorable_labels.csv")
 
 # 2018 OHSU from VALIDATA (external validation cohort)
-OHSU_2018_EXPR = os.path.join(BASE, "cleaned", "validata_cleaned_expression.csv")
-OHSU_2018_PRED = os.path.join(BASE, "results", "validata_favourable_fusion_predictions.csv")
+OHSU_2018_EXPR = os.path.join(parent_dir, "cleaned", "validata_cleaned_expression.csv")
+OHSU_2018_PRED = os.path.join(parent_dir, "results", "validata_favourable_fusion_predictions.csv")
 
-TCGA_EXPR = os.path.join(BASE, "cleaned", "tcga_cleaned_expression.csv")
-TARGET_EXPR = os.path.join(BASE, "cleaned", "target_cleaned_expression.csv")
+TCGA_EXPR = os.path.join(parent_dir, "cleaned", "tcga_cleaned_expression.csv")
+TARGET_EXPR = os.path.join(parent_dir, "cleaned", "target_cleaned_expression.csv")
 
-TCGA_PRED = os.path.join(BASE, "results", "TCGA_favourable_fusion_predictions.csv")
-TARGET_PRED = os.path.join(BASE, "results", "TARGET_favourable_fusion_predictions.csv")
+TCGA_PRED = os.path.join(parent_dir, "results", "TCGA_favourable_fusion_predictions.csv")
+TARGET_PRED = os.path.join(parent_dir, "results", "TARGET_favourable_fusion_predictions.csv")
 
-OUTDIR = os.path.join(BASE, "results")
+OUTDIR = os.path.join(parent_dir, "results")
 os.makedirs(OUTDIR, exist_ok=True)
 
 
@@ -196,7 +197,7 @@ check_gene("MYH11", target_stats)
 
 
 # COMPARE WITH RIDGE MODEL COEFFICIENTS
-MODEL_PATH = "models/ridge_eln_model.joblib"
+MODEL_PATH = os.path.join(parent_dir, "models", "ridge_eln_model.joblib")
 
 print("\nComparing model coefficients...")
 
@@ -266,7 +267,7 @@ plt.rcParams["figure.dpi"] = 120
 plt.rcParams["savefig.dpi"] = 400
 plt.rcParams["font.family"] = "Arial"
 
-FIGDIR = os.path.join(BASE, "results", "figures")
+FIGDIR = os.path.join(parent_dir, "results", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # ==========================================================
@@ -427,7 +428,7 @@ print("\nGenerating fusion subtype heatmap...")
 # ----------------------------------------------------------
 
 expr = pd.read_csv(
-    r"C:\Users\mba22ew\test\cleaned\ohsu_cleaned_expression.csv",
+    os.path.join(parent_dir, "cleaned", "ohsu_cleaned_expression.csv"),
     index_col=0
 )
 
@@ -441,7 +442,7 @@ print("Expression shape:", expr.shape)
 # ----------------------------------------------------------
 
 clin = pd.read_csv(
-    r"C:\Users\mba22ew\test\aml_ohsu_2022_clinical_data.tsv",
+    os.path.join(parent_dir, "aml_ohsu_2022_clinical_data.tsv"),
     sep="\t"
 )
 
@@ -492,15 +493,15 @@ print(labels.value_counts())
 # ----------------------------------------------------------
 
 ohsu_genes = pd.read_csv(
-    r"C:\Users\mba22ew\test\results\OHSU_top_genes.csv"
+    os.path.join(parent_dir, "results", "OHSU_top_genes.csv")
 )["gene"]
 
 tcga_genes = pd.read_csv(
-    r"C:\Users\mba22ew\test\results\TCGA_top_genes.csv"
+    os.path.join(parent_dir, "results", "TCGA_top_genes.csv")
 )["gene"]
 
 target_genes = pd.read_csv(
-    r"C:\Users\mba22ew\test\results\TARGET_top_genes.csv"
+    os.path.join(parent_dir, "results", "TARGET_top_genes.csv")
 )["gene"]
 
 ohsu_genes = set(ohsu_genes.head(50))
@@ -577,21 +578,21 @@ ohsu_counts = labels.value_counts()
 
 # OHSU 2018 VALIDATA predicted fusions
 validata_fusion = pd.read_csv(
-    os.path.join(BASE,"results","fusion_inference","VALIDATA_fusion_inference.csv")
+    os.path.join(parent_dir,"results","fusion_inference","VALIDATA_fusion_inference.csv")
 )
 
 validata_counts = validata_fusion["Predicted_fusion_program"].value_counts()
 
 # TCGA predicted fusions
 tcga_fusion = pd.read_csv(
-    os.path.join(BASE,"results","fusion_inference","TCGA_fusion_inference.csv")
+    os.path.join(parent_dir,"results","fusion_inference","TCGA_fusion_inference.csv")
 )
 
 tcga_counts = tcga_fusion["Predicted_fusion_program"].value_counts()
 
 # TARGET predicted fusions
 target_fusion = pd.read_csv(
-    os.path.join(BASE,"results","fusion_inference","TARGET_fusion_inference.csv")
+    os.path.join(parent_dir,"results","fusion_inference","TARGET_fusion_inference.csv")
 )
 
 target_counts = target_fusion["Predicted_fusion_program"].value_counts()

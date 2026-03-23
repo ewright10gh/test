@@ -7,10 +7,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, roc_auc_score
 from joblib import dump
 
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
+
 # =========================
 # 1. LOAD EXPRESSION MATRIX
 # =========================
-expr = pd.read_csv(r"C:\Users\mba22ew\test\cleaned\ohsu_cleaned_expression.csv", index_col=0)
+expr = pd.read_csv(os.path.join(parent_dir, "cleaned", "ohsu_cleaned_expression.csv"), index_col=0)
 X = expr.values
 genes = expr.columns
 samples = expr.index
@@ -21,7 +25,7 @@ print("Expression matrix:", X.shape)
 # 2. LOAD CLINICAL DATA
 # =========================
 clinical = pd.read_csv(
-    r"C:\Users\mba22ew\test\aml_ohsu_2022_clinical_data.tsv",
+    os.path.join(parent_dir, "aml_ohsu_2022_clinical_data.tsv"),
     sep="\t",
     low_memory=False
 ).set_index("Sample ID")
@@ -128,7 +132,7 @@ print("\nROC-AUC:", roc_auc)
 # 9. FEATURE IMPORTANCE
 # =========================
 coefs = pd.Series(ridge.coef_[0], index=genes).sort_values(ascending=False)
-coefs.to_csv(r"C:\Users\mba22ew\test\cleaned\ridge_feature_importance.csv")
+coefs.to_csv(os.path.join(parent_dir, "cleaned", "ridge_feature_importance.csv"))
 
 print("\nTop 20 genes driving favorable fusion classification:")
 print(coefs.head(20))
@@ -136,11 +140,11 @@ print(coefs.head(20))
 # =========================
 # 10. SAVE MODEL + SCALER + LABELS
 # =========================
-os.makedirs(r"C:\Users\mba22ew\test\models", exist_ok=True)
-dump(ridge, r"C:\Users\mba22ew\test\models\ridge_eln_model.joblib")
-dump(scaler, r"C:\Users\mba22ew\test\models\ridge_scaler.joblib")
-np.save(r"C:\Users\mba22ew\test\models\ohsu_favorable_labels.npy", y.values)
-y.to_csv(r"C:\Users\mba22ew\test\cleaned\ohsu_favorable_labels.csv")
+os.makedirs(os.path.join(parent_dir, "models"), exist_ok=True)
+dump(ridge, os.path.join(parent_dir, "models", "ridge_eln_model.joblib"))
+dump(scaler, os.path.join(parent_dir, "models", "ridge_scaler.joblib"))
+np.save(os.path.join(parent_dir, "models", "ohsu_favorable_labels.npy"), y.values)
+y.to_csv(os.path.join(parent_dir, "cleaned", "ohsu_favorable_labels.csv"))
 
 print("\n✅ ELN Ridge model pipeline complete")
 print("Samples:", X.shape[0])

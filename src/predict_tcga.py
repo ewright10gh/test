@@ -1,12 +1,16 @@
 import pandas as pd
 import numpy as np
 import joblib
+import os
 
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
 
 # LOAD MODEL
 
-model = joblib.load(r"C:\Users\mba22ew\test\models\ridge_eln_model.joblib")
-scaler = joblib.load(r"C:\Users\mba22ew\test\models\ridge_scaler.joblib")
+model = joblib.load(os.path.join(parent_dir, "models", "ridge_eln_model.joblib"))
+scaler = joblib.load(os.path.join(parent_dir, "models", "ridge_scaler.joblib"))
 
 print("Model + scaler loaded")
 
@@ -14,7 +18,7 @@ print("Model + scaler loaded")
 # LOAD TCGA EXPRESSION
 
 X = pd.read_csv(
-    r"C:\Users\mba22ew\test\cleaned\tcga_cleaned_expression.csv",
+    os.path.join(parent_dir, "cleaned", "tcga_cleaned_expression.csv"),
     index_col=0
 )
 
@@ -46,6 +50,6 @@ print(results["favourable_fusion_predicted"].value_counts())
 
 # SAVE RESULTS
 
-results.to_csv(r"C:\Users\mba22ew\test\results\tcga_favourable_fusion_predictions.csv", index=False)
+results.to_csv(os.path.join(parent_dir, "results", "tcga_favourable_fusion_predictions.csv"), index=False)
 
 print("\n✅ TCGA predictions saved")

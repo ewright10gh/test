@@ -11,15 +11,15 @@ from joblib import load
 
 # PATHS
 
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
 
-BASE = r"C:\Users\mba22ew\test"
+X_TARGET_PATH = os.path.join(parent_dir, "cleaned", "X_target.npy")
+TARGET_EXPR_PATH = os.path.join(parent_dir, "cleaned", "target_cleaned_expression.csv")
 
-X_TARGET_PATH = os.path.join(BASE, "cleaned", "X_target.npy")
-TARGET_EXPR_PATH = os.path.join(BASE, "cleaned", "target_cleaned_expression.csv")
+MODEL_PATH = os.path.join(parent_dir, "models", "ridge_eln_model.joblib")
 
-MODEL_PATH = os.path.join(BASE, "models", "ridge_eln_model.joblib")
-
-OUTDIR = os.path.join(BASE, "results")
+OUTDIR = os.path.join(parent_dir, "results")
 os.makedirs(OUTDIR, exist_ok=True)
 
 
