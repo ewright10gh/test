@@ -43,7 +43,7 @@
    - run: `python src/validation.py`
 
 ---
-
+or streamlit run app.py
 
 ## ⚙️ Environment Setup (Conda)
 
@@ -121,7 +121,7 @@ Both must be tab-separated with gene names in the first column.
 
 ## 👤 Author
 
-MSc Bioinformatics Project
+Erin Wright
 
 ---
 
