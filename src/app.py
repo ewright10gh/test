@@ -32,12 +32,12 @@ st.title("🧬 AML Favourable Fusion Predictor")
 st.markdown("""
 <div style="background-color: #EDE9FE; padding: 20px; border-radius: 10px; border-left: 4px solid #8B5CF6;">
     <h3 style="color: #6D28D9; margin-top: 0;">Upload RNA-seq Expression Data</h3>
-    <p>Predict <b>favourable fusion</b> vs <b>no favourable fusion</b> using transcriptomic data.</p>
+    <p>Predict <b> AML favourable fusions</b>  using transcriptomic data.</p>
     
-    **Supported formats:**
-    - 📊 TARGET TPM (Entrez IDs)
-    - 📈 TCGA RSEM (gene|entrez union IDs)  
-    - 📉 OHSU RPKM (HUGO symbols)
+    **Supported RNA-Seq formats:**
+    - 📊 TPM (Entrez IDs)
+    
+    - 📉 RPKM (HUGO symbols)
 </div>
 """, unsafe_allow_html=True)
 
@@ -97,7 +97,7 @@ model_genes = ohsu_clean.columns
 # -----------------------------
 
 uploaded = st.file_uploader(
-    "Upload TARGET RNA-seq file",
+    "Upload an RNA-seq file",
     type=["txt","tsv"]
 )
 
@@ -116,7 +116,7 @@ if uploaded is not None:
 
     target = pd.read_csv(uploaded, sep="\t", index_col=0)
 
-    st.write("Original shape:", target.shape)
+    
 
 
     # -----------------------------
@@ -129,7 +129,7 @@ if uploaded is not None:
     if target.shape[0] > target.shape[1]:
         target = target.T
 
-    st.write("After transpose:", target.shape)
+    
 
 
     # -----------------------------
@@ -162,8 +162,8 @@ if uploaded is not None:
     if target.index.name and "hugo" in str(target.index.name).lower():
         dataset_type = "OHSU"
 
-    st.write("Detected dataset type:", dataset_type)
-    st.write("Example genes:", sample_genes[:10])
+   
+  
 
     # -----------------------------
     # DATASET-SPECIFIC PROCESSING
@@ -209,7 +209,7 @@ if uploaded is not None:
         target.columns = target.columns.astype(str).str.strip()
 
 
-    st.write("After gene harmonisation:", target.shape)
+    st.write("Number of samples, number of genes:", target.shape)
 
 
     # -----------------------------
@@ -449,7 +449,7 @@ else:
 
 # SIDEBAR - Help and Info
 with st.sidebar:
-    st.markdown("---")
+   
     st.subheader("📖 Input Format Guide")
     
     st.markdown("""
@@ -458,12 +458,9 @@ with st.sidebar:
     A tab-separated expression matrix where:
     - **Rows** = Samples
     - **Columns** = Genes  
-    - **Values** = Expression levels (TPM/RSEM/RPKM)
+    - **Values** = Expression levels (TPM/RPKM)
     
-    **Supported Formats:**
-    - 🎯 **TARGET TPM**: Gene IDs as Entrez numbers
-    - 🔬 **TCGA RSEM**: Format like `GENENAME|12345`
-    - 📊 **OHSU RPKM**: Gene symbols (HUGO)
+
     
     **Example File Structure:**
     ```
@@ -473,7 +470,7 @@ with st.sidebar:
     ...
     ```
     """)
-    
+    st.markdown("Find AML datasets at [cBioPortal](https://www.cbioportal.org/)")
     st.markdown("---")
     st.subheader("⚙️ How It Works")
     
@@ -490,6 +487,6 @@ with st.sidebar:
     """)
     
     st.markdown("---")
-    st.subheader("❓ Questions?")
+    
     st.markdown("Detailed results and gene importance analysis are provided after prediction.")
 
