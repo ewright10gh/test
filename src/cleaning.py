@@ -1,120 +1,219 @@
+import os
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 
-ohsu = pd.read_csv(
-    r"C:\Users\mba22ew\test\data_mrna_seq_rpkm.txt",  # Windows path
-    sep="\t",
-    index_col=0
-)
 
-target = pd.read_csv(
-    r"C:\Users\mba22ew\test\data_mrna_seq_tpm.txt",  # Windows path
-    sep="\t",
-    index_col=0
-)
-mapping = pd.read_csv(
-    r"C:\Users\mba22ew\test\entrez_to_hugo.tsv",
-    sep="\t"
-)
+# 1. LOAD DATA
 
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(script_dir)
+
+ohsu = pd.read_csv(os.path.join(parent_dir, "data_mrna_seq_rpkm.txt"), sep="\t", index_col=0)
+validata = pd.read_csv(os.path.join(parent_dir, "validata_mrna_seq_rpkm.txt"), sep="\t", index_col=0)
+target = pd.read_csv(os.path.join(parent_dir, "data_mrna_seq_tpm.txt"), sep="\t", index_col=0)
+tcga = pd.read_csv(os.path.join(parent_dir, "data_mrna_seq_v2_rsem.txt"), sep="\t", index_col=0)
+mapping = pd.read_csv(os.path.join(parent_dir, "hgnc_complete_set.txt"), sep="\t", low_memory=False)
 
 print("Original shapes:")
 print("OHSU:", ohsu.shape)
 print("TARGET:", target.shape)
+print("TCGA:", tcga.shape)
 
 
-# =========================
-# 2. CHECK ORIENTATION
-# =========================
-# We expect: samples × genes
-# If genes are rows, transpose
+# 2. FIX ORIENTATION (samples in rows, genes in columns)
 
-if ohsu.shape[0] > ohsu.shape[1]:
-    print("Transposing OHSU")
-    ohsu = ohsu.T
+def transpose_if_needed(df):
+    if df.shape[0] > df.shape[1]:
+        return df.T
+    return df
 
-if target.shape[0] > target.shape[1]:
-    print("Transposing TARGET")
-    target = target.T
+ohsu = transpose_if_needed(ohsu)
+validata = transpose_if_needed(validata)
+target = transpose_if_needed(target)
+tcga = transpose_if_needed(tcga)
 
-
-print("\nAfter orientation fix:")
+print("\nAfter transpose:")
 print("OHSU:", ohsu.shape)
+print("VALIDATA:", validata.shape)
 print("TARGET:", target.shape)
-print("OHSU genes:", ohsu.columns[:5])
-print("TARGET genes:", target.columns[:5])
+print("TCGA:", tcga.shape)
 
-# -----------------------------
-# Map Entrez → Hugo
-# -----------------------------
-mapping = mapping.dropna()
-mapping = mapping.drop_duplicates("Entrez_Gene_Id")
 
-target["Hugo_Symbol"] = target.index.map(
-    mapping.set_index("Entrez_Gene_Id")["Hugo_Symbol"]
-)
+# 3. MAP ENTREZ → HUGO SYMBOL (TARGET dataset)
 
-target = target.dropna(subset=["Hugo_Symbol"])
-target = target.set_index("Hugo_Symbol")
+mapping = mapping[["symbol", "entrez_id"]].dropna()
+mapping["entrez_id"] = mapping["entrez_id"].astype(float).astype(int).astype(str)
 
-# -----------------------------
-# Remove duplicate genes
-# -----------------------------
-target = target.groupby(target.index).mean()
+# Map TARGET columns
+target.columns = target.columns.astype(str)
+entrez_to_symbol = dict(zip(mapping["entrez_id"], mapping["symbol"]))
+target.columns = target.columns.map(entrez_to_symbol)
 
-# =========================
-# 3. MATCH GENES (COLUMNS)
-# =========================
+# Drop unmapped genes
+target = target.loc[:, target.columns.notna()]
 
-common_genes = ohsu.columns.intersection(target.columns)
+# Collapse duplicates by averaging
+target = target.T.groupby(level=0).mean().T
 
+print("\nTARGET after gene mapping:", target.shape)
+
+# Apply same step for VALIDATA (Entrez->Symbol mapping only when needed)
+validata.columns = validata.columns.astype(str)
+validata_entrez_mapped = validata.columns.map(entrez_to_symbol)
+# If many columns map by Entrez, assume Entrez-based input and replace; else keep current symbols
+if validata_entrez_mapped.notna().sum() >= max(1, int(len(validata.columns) * 0.25)):
+    validata.columns = validata_entrez_mapped
+    validata = validata.loc[:, validata.columns.notna()]
+    validata = validata.T.groupby(level=0).mean().T
+    print("\nVALIDATA after Entrez->Symbol mapping:", validata.shape)
+else:
+    # Assume VALIDATA is already symbol-based
+    validata = validata.loc[:, validata.columns.notna()]
+    validata = validata.T.groupby(level=0).mean().T
+    print("\nVALIDATA assumed HUGO symbol format (no mapping applied):", validata.shape)
+
+
+# 4. MATCH GENES ACROSS ALL DATASETS
+
+# Make sure column names are comparable (strings, no surrounding whitespace)
+ohsu.columns = ohsu.columns.astype(str).str.strip()
+target.columns = target.columns.astype(str).str.strip()
+tcga.columns = tcga.columns.astype(str).str.strip()
+
+# collapse duplicate column names by averaging expression
+# (TARGET was handled earlier but this is safe to call on all three)
+def collapse_duplicates(df):
+    if df.columns.duplicated().any():
+        df = df.T.groupby(level=0).mean().T
+    return df
+
+ohsu = collapse_duplicates(ohsu)
+validata = collapse_duplicates(validata)
+target = collapse_duplicates(target)
+tcga = collapse_duplicates(tcga)
+
+# recompute intersection in case collapsing changed counts
+common_genes = ohsu.columns.intersection(target.columns).intersection(tcga.columns).intersection(validata.columns)
 print("\nCommon genes:", len(common_genes))
 
+if len(common_genes) == 0:
+    raise ValueError("❌ No common genes found — check gene naming")
+
+# Subset datasets to common genes
 ohsu = ohsu[common_genes]
+validata = validata[common_genes]
 target = target[common_genes]
+tcga = tcga[common_genes]
 
 
-# =========================
-# 4. LOG2 TRANSFORM TARGET ONLY
-# =========================
+# 5. FORCE NUMERIC AND DROP ALL-NaN GENES
+
+def numeric_clean(df):
+    df = df.apply(pd.to_numeric, errors="coerce")
+    df = df.dropna(axis=1, how="all")
+    return df
+
+ohsu = numeric_clean(ohsu)
+validata = numeric_clean(validata)
+target = numeric_clean(target)
+tcga = numeric_clean(tcga)
+
+# report duplicates that might cause mismatched column numbers later
+for name, df in [('OHSU', ohsu), ('VALIDATA', validata), ('TARGET', target), ('TCGA', tcga)]:
+    total = len(df.columns)
+    unique = df.columns.nunique()
+    dup = df.columns[df.columns.duplicated()].unique()
+    print(f"{name} columns: total={total}, unique={unique}, dup_count={len(dup)}")
+    if len(dup) > 0:
+        print(f"  duplicate names sample: {dup[:5]}")
+
+
+# 6. LOG2 TRANSFORM TARGET & TCGA
 
 target = np.log2(target + 1)
+tcga = np.log2(tcga + 1)
 
 
-# =========================
-# 5. REMOVE LOW-VARIANCE GENES (OPTIONAL BUT RECOMMENDED)
-# =========================
+# 7. VARIANCE FILTER (based on OHSU)
 
 gene_variance = ohsu.var(axis=0)
 high_var_genes = gene_variance[gene_variance > 1].index
 
-ohsu = ohsu[high_var_genes]
-target = target[high_var_genes]
+# Intersect with other datasets to ensure all contain the same high-variance genes
+high_var_genes = high_var_genes.intersection(target.columns).intersection(tcga.columns).intersection(validata.columns)
+print("Genes passing variance filter in all datasets:", len(high_var_genes))
 
+if len(high_var_genes) < 50:
+    raise ValueError("❌ Too few genes after variance filter")
+
+# Subset all datasets to high-variance genes
+ohsu = ohsu[high_var_genes]
+validata = validata[high_var_genes]
+target = target[high_var_genes]
+tcga = tcga[high_var_genes]
+
+# --- sanity check: sometimes indexing quirks or dtypes can leave mismatches ---
+common_after = ohsu.columns.intersection(target.columns).intersection(tcga.columns).intersection(validata.columns)
+if len(common_after) != len(high_var_genes):
+    print(f"WARNING: {len(high_var_genes) - len(common_after)} genes dropped when re-checking intersections")
+    high_var_genes = common_after
+    ohsu = ohsu[high_var_genes]
+    target = target[high_var_genes]
+    tcga = tcga[high_var_genes]
+
+print("Genes retained after final intersection:", len(high_var_genes))
+
+
+# 8. LOCK COLUMN ORDER (sort alphabetically)
+
+ohsu = ohsu.sort_index(axis=1)
+validata = validata[ohsu.columns]
+target = target[ohsu.columns]
+tcga = tcga[ohsu.columns]
+
+# Verify
 print("\nAfter variance filter:")
 print("OHSU:", ohsu.shape)
+print("VALIDATA:", validata.shape)
 print("TARGET:", target.shape)
+print("TCGA:", tcga.shape)
+assert (ohsu.columns == validata.columns).all() and (ohsu.columns == target.columns).all() and (ohsu.columns == tcga.columns).all(), "Column mismatch!"
+
+print("✅ Column order identical across all datasets")
 
 
-# =========================
-# 6. SCALE USING OHSU ONLY
-# =========================
+# 9. SCALE
 
 scaler = StandardScaler()
-
 X_ohsu = scaler.fit_transform(ohsu)
+X_validata = scaler.transform(validata)
 X_target = scaler.transform(target)
+X_tcga = scaler.transform(tcga)
 
 
-# =========================
-# 7. SAVE CLEAN MATRICES
-# =========================
+# 10. SAVE
 
-np.save("X_ohsu.npy", X_ohsu)
-np.save("X_target.npy", X_target)
+# ensure output directory exists
+out_dir = os.path.join(parent_dir, "cleaned")
+os.makedirs(out_dir, exist_ok=True)
 
-ohsu.to_csv("ohsu_cleaned_expression.csv")
-target.to_csv("target_cleaned_expression.csv")
+np.save(os.path.join(out_dir, "X_ohsu.npy"), X_ohsu)
+np.save(os.path.join(out_dir, "X_validata.npy"), X_validata)
+np.save(os.path.join(out_dir, "X_target.npy"), X_target)
+np.save(os.path.join(out_dir, "X_tcga.npy"), X_tcga)
 
-print("\nPreprocessing complete ✅")
+ohsu.to_csv(os.path.join(out_dir, "ohsu_cleaned_expression.csv"))
+validata.to_csv(os.path.join(out_dir, "validata_cleaned_expression.csv"))
+target.to_csv(os.path.join(out_dir, "target_cleaned_expression.csv"))
+tcga.to_csv(os.path.join(out_dir, "tcga_cleaned_expression.csv"))
+
+
+# 11. SUCCESS MESSAGE
+
+print("\n✅ PREPROCESSING COMPLETE")
+print("Final OHSU matrix:", X_ohsu.shape)
+print("Final TARGET matrix:", X_target.shape)
+print("Final TCGA matrix:", X_tcga.shape)
+print("Gene count:", ohsu.shape[1])
