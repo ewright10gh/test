@@ -1,27 +1,29 @@
 import pandas as pd
+import numpy as np
 from sklearn.metrics import classification_report, roc_auc_score
 import os
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(script_dir)
 
-# =========================
+
 
 # 1. LOAD MODEL PREDICTIONS
 
-# =========================
+
 
 results = pd.read_csv(os.path.join(parent_dir, "results", "tcga_favourable_fusion_predictions.csv"))
 
 print("Predictions loaded:", results.shape)
 
-# =========================
+
 
 # 2. LOAD TCGA CLINICAL
 
-# =========================
+
 
 clinical = pd.read_csv(
     os.path.join(parent_dir, "laml_tcga_pub_clinical_data.tsv"),
@@ -35,11 +37,11 @@ print("Clinical loaded:", clinical.shape)
 
 clinical = clinical.set_index("Sample ID")
 
-# =========================
+
 
 # 3. ALIGN SAMPLES
 
-# =========================
+
 
 common_samples = results["Sample_ID"].astype(str).isin(clinical.index)
 
@@ -48,11 +50,11 @@ clinical = clinical.loc[results["Sample_ID"]]
 
 print("Samples overlapping:", len(results))
 
-# =========================
+
 
 # 4. MAP CYTOGENETICS → ELN
 
-# =========================
+
 
 def map_fusion(label):
 
@@ -78,11 +80,11 @@ y_prob = results["favourable_fusion_probability"]
 print("\nTrue favourable fusion distribution:")
 print(y_true.value_counts())
 
-# =========================
+
 
 # 5. EVALUATION
 
-# =========================
+
 
 print("\n=== CLASSIFICATION REPORT ===")
 print(classification_report(y_true, y_pred))
@@ -98,9 +100,9 @@ else:
     print("\nROC AUC cannot be computed (only one class present)")
 
 
-# =========================
+
 # VALIDATA VALIDATION
-# =========================
+
 
 validata_results = pd.read_csv(os.path.join(parent_dir, "results", "validata_favourable_fusion_predictions.csv"))
 validata_clinical = pd.read_csv(
@@ -154,6 +156,130 @@ if y_true_validata.nunique() > 1:
 else:
     print("\nValidata ROC AUC cannot be computed (only one class present)")
 
+# Load TARGET predictions for combined probability distributions
+try:
+    target_results = pd.read_csv(os.path.join(parent_dir, "results", "TARGET_favourable_fusion_predictions.csv"))
+    target_results["favourable_fusion_probability"] = pd.to_numeric(
+        target_results["favourable_fusion_probability"], errors="coerce"
+    )
+    target_results = target_results.dropna(subset=["favourable_fusion_probability"])
+    target_probs = target_results["favourable_fusion_probability"].copy()
+except FileNotFoundError:
+    target_results = None
+    target_probs = pd.Series(dtype=float)
+    print("Warning: TARGET prediction file not found. Combined distribution figure will exclude TARGET.")
+
+# Combine probabilities
+plot_df = pd.DataFrame({
+    "Probability": np.concatenate([
+        y_prob.dropna().to_numpy(),
+        y_prob_validata.dropna().to_numpy(),
+        target_probs.to_numpy()
+    ]),
+    "Dataset": (
+        ["TCGA"] * len(y_prob.dropna()) +
+        ["OHSU 2018"] * len(y_prob_validata.dropna()) +
+        ["TARGET"] * len(target_probs)
+    )
+}).dropna()
+
+# Sanity check: proportions above threshold
+threshold = 0.675
+
+for ds in ["TCGA", "OHSU 2018", "TARGET"]:
+    p = plot_df.loc[
+        plot_df["Dataset"] == ds,
+        "Probability"
+    ]
+    print(f"{ds}: {(p > threshold).mean():.3f} above threshold")
+
+# Consistent palette
+palette = {
+    "TARGET": "#2C7FB8",
+    "TCGA": "#D95F02",
+    "OHSU 2018": "#FFC0CB"
+}
+
+# -----------------------------------------
+# Two-panel figure
+# -----------------------------------------
+
+fig, axes = plt.subplots(
+    1, 2,
+    figsize=(12,5)
+)
+
+
+# Left panel: ECDF
+
+
+sns.ecdfplot(
+    data=plot_df,
+    x="Probability",
+    hue="Dataset",
+    hue_order=["TARGET","TCGA","OHSU 2018"],
+    palette=palette,
+    linewidth=2,
+    ax=axes[0]
+)
+
+axes[0].axvline(
+    threshold,
+    linestyle="--",
+    color="black",
+    linewidth=1.5
+)
+
+axes[0].annotate(
+    "Threshold (0.675)",
+    xy=(threshold,0.75),
+    xytext=(0.76,0.60),
+    arrowprops=dict(arrowstyle="->", lw=1.2),
+    fontsize=10
+)
+
+axes[0].set_title("Cumulative probability distributions")
+axes[0].set_xlabel("Predicted probability of favourable AML")
+axes[0].set_ylabel("Cumulative fraction")
+axes[0].set_xlim(0,1)
+
+
+# Right panel: Histogram density
+
+
+sns.histplot(
+    data=plot_df,
+    x="Probability",
+    hue="Dataset",
+    hue_order=["TARGET","TCGA","OHSU 2018"],
+    palette=palette,
+    bins=30,
+    stat="density",
+    common_norm=False,
+    element="step",
+    fill=True,
+    alpha=0.25,
+    ax=axes[1]
+)
+
+axes[1].axvline(
+    threshold,
+    linestyle="--",
+    color="black",
+    linewidth=1.5
+)
+
+axes[1].set_title("Probability density distributions")
+axes[1].set_xlabel("Predicted probability of favourable AML")
+axes[1].set_ylabel("Density")
+axes[1].set_xlim(0,1)
+
+plt.tight_layout()
+plt.savefig(
+    "final_probability_distribution_ecdf_hist.png",
+    dpi=300
+)
+plt.show()
 
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
@@ -239,14 +365,28 @@ plt.figure(figsize=(6,5))
 plt.plot(thresholds, precision[:-1], linewidth=2, label="Precision")
 plt.plot(thresholds, recall[:-1], linewidth=2, label="Recall")
 
-plt.axvline(0.675, linestyle="--", color="black", label="Chosen threshold")
+plt.axvline(0.675, linestyle="--", color="black")
 
-plt.xlabel("Prediction probability threshold", fontsize=12)
+plt.xlabel("Classification threshold (predicted probability of favourable AML)", fontsize=12)
 plt.ylabel("Score", fontsize=12)
 
 plt.title("Precision–Recall Trade-off", fontsize=13)
 
 plt.legend(frameon=False)
+
+# Annotation for chosen operating point
+ymax = plt.gca().get_ylim()[1]
+plt.annotate(
+    "Chosen operating point",
+    xy=(0.675, ymax * 0.8),
+    xytext=(0.675 + 0.07, ymax * 0.9),
+    arrowprops=dict(arrowstyle="->", lw=1.2),
+    fontsize=10
+)
+
+# Note on sharp drop
+plt.text(0.85, 0.05, "Sharp drop reflects few\nhigh-confidence samples", 
+         fontsize=8, ha='center', va='bottom', transform=plt.gca().transAxes)
 
 plt.tight_layout()
 plt.savefig("precision_recall_threshold.png", dpi=400)
@@ -293,7 +433,7 @@ plt.plot(thresholds, recall[:-1], label="Recall")
 plt.axvline(0.675, linestyle="--")
 
 plt.xlabel("Probability Threshold")
-plt.ylabel("Score")
+plt.ylabel("Precision / Recall (proportion)")
 plt.title("Precision & Recall vs Threshold")
 
 plt.legend()

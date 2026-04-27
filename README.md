@@ -50,7 +50,7 @@ or streamlit run app.py
 Open a terminal in VS Code and run:
 
 ```bash
-conda create -n rna_seq_env python=3.9 pandas numpy -y
+conda create -n rna_seq_env python=3.9 numpy pandas scikit-learn matplotlib streamlit joblib -y
 conda activate rna_seq_env
 ```
 
@@ -62,13 +62,7 @@ python -c "import pandas, numpy; print('Environment ready')"
 
 ---
 
-## 📦 Install Dependencies (optional if using requirements.txt)
 
-```bash
-pip install -r requirements.txt
-```
-
----
 
 ## ▶️ Run the Cleaning Script
 

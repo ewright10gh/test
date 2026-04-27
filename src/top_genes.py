@@ -9,6 +9,7 @@ import matplotlib
 matplotlib.use('Agg')  # Use non-GUI backend
 import matplotlib.pyplot as plt
 from joblib import load
+from scipy.stats import mannwhitneyu, pearsonr
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -151,21 +152,27 @@ top_target.to_csv(
 
 # GENE OVERLAP
 
-set_ohsu_2022 = set(top_ohsu_2022["gene"])
-set_ohsu_2018 = set(top_ohsu_2018["gene"])
-set_tcga = set(top_tcga["gene"])
-set_target = set(top_target["gene"])
+from itertools import combinations
 
-overlap_all = set_ohsu_2022 & set_ohsu_2018 & set_tcga & set_target
-overlap_ohsu_2022_tcga = set_ohsu_2022 & set_tcga
-overlap_ohsu_2018_tcga = set_ohsu_2018 & set_tcga
-overlap_ohsu_2022_target = set_ohsu_2022 & set_target
+# Store all sets in a dictionary
+gene_sets = {
+    "OHSU 2022": set(top_ohsu_2022["gene"]),
+    "OHSU 2018": set(top_ohsu_2018["gene"]),
+    "TCGA": set(top_tcga["gene"]),
+    "TARGET": set(top_target["gene"])
+}
 
-print("\nGene overlap:")
-print("OHSU 2022 ∩ TCGA:", len(overlap_ohsu_2022_tcga))
-print("OHSU 2018 ∩ TCGA:", len(overlap_ohsu_2018_tcga))
-print("OHSU 2022 ∩ TARGET:", len(overlap_ohsu_2022_target))
-print("All four datasets:", len(overlap_all))
+print("\nPairwise gene overlaps:")
+
+# Loop through all 2-cohort combinations
+for (name1, set1), (name2, set2) in combinations(gene_sets.items(), 2):
+    overlap = set1 & set2
+    print(f"{name1} ∩ {name2}: {len(overlap)}")
+
+# Keep your 4-way overlap as well
+overlap_all = set.intersection(*gene_sets.values())
+
+print("\nAll four datasets:", len(overlap_all))
 print("Shared genes:", overlap_all)
 
 
@@ -224,10 +231,10 @@ plt.scatter(
 )
 
 
-plt.xlabel("Expression difference (favourable - adverse)")
-plt.ylabel("Ridge coefficient")
+plt.xlabel("Expression difference Fav − Non-fav (Log2FC)")
+plt.ylabel("Ridge coefficient (standardized log-odds effect size)")
 
-plt.title("Model weight vs biological expression difference")
+plt.title("Model coefficient vs expression difference")
 
 plt.tight_layout()
 plt.subplots_adjust(left=0.18)
@@ -246,9 +253,9 @@ print("\n✅ Gene comparison complete")
 print("Results saved to:", OUTDIR)
 
 
-# ==========================================================
+
 # PUBLICATION-QUALITY FIGURE GENERATION
-# ==========================================================
+
 
 import os
 import pandas as pd
@@ -270,9 +277,9 @@ plt.rcParams["font.family"] = "Arial"
 FIGDIR = os.path.join(parent_dir, "results", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-# ==========================================================
+
 # 1. DATASET GENE HEATMAP
-# ==========================================================
+
 
 print("Generating dataset gene heatmap...")
 
@@ -310,7 +317,7 @@ sns.heatmap(
     linecolor="lightgrey",
     annot=True,
     fmt=".2f",
-    cbar_kws={"label":"Expression difference"}
+    cbar_kws={"label":"Expression difference (Log2FC)"}
 )
 
 plt.title("Top AML transcriptional differences across datasets", pad=15)
@@ -327,9 +334,9 @@ plt.close()
 # Store top genes from dataset heatmap for later use
 top_heatmap_genes = heatmap_df.index.tolist()
 
-# ==========================================================
+
 # 2. EFFECT SIZE COMPARISON SCATTER
-# ==========================================================
+
 
 print("Generating dataset comparison scatter plot...")
 
@@ -347,8 +354,8 @@ plt.scatter(
 plt.axhline(0, linestyle="--", linewidth=1)
 plt.axvline(0, linestyle="--", linewidth=1)
 
-plt.xlabel("OHSU gene effect size")
-plt.ylabel("TCGA gene effect size")
+plt.xlabel("OHSU Expression Difference Fav − Non-fav(Log2FC)")
+plt.ylabel("TCGA Expression Difference Fav − Non-fav(Log2FC)")
 
 plt.title("Consistency of gene signatures between cohorts", pad=12)
 
@@ -357,9 +364,15 @@ plt.tight_layout()
 plt.savefig(os.path.join(FIGDIR,"gene_effect_scatter.png"))
 plt.close()
 
-# ==========================================================
+# Compute Pearson correlation for gene effect consistency
+pearson_r, pearson_p = pearsonr(
+    ohsu_2022_stats.loc[common,"mean_diff"],
+    tcga_stats.loc[common,"mean_diff"]
+)
+print(f"Pearson correlation (OHSU 2022 vs TCGA mean_diff across all common genes): {pearson_r:.4f}, p-value: {pearson_p:.4e}")
+
 # 3. TOP GENES BARPLOT
-# ==========================================================
+
 
 print("Generating top gene barplot...")
 
@@ -369,7 +382,7 @@ plt.figure(figsize=(7,6))
 
 top_genes["mean_diff"].sort_values().plot.barh(color="#ce3581")
 
-plt.xlabel("Expression difference (favourable − adverse)")
+plt.xlabel("Expression difference Fav − Non-fav (Log2FC)")
 plt.ylabel("Gene")
 
 plt.title("Top genes associated with favourable AML (OHSU)", pad=12)
@@ -379,9 +392,9 @@ plt.tight_layout()
 plt.savefig(os.path.join(FIGDIR,"ohsu_top_genes_barplot.png"))
 plt.close()
 
-# ==========================================================
+
 # 4. SHARED GENE EXPRESSION COMPARISON
-# ==========================================================
+
 
 print("Generating shared gene comparison...")
 
@@ -390,18 +403,46 @@ shared = list(overlap_all)
 if len(shared) > 0:
 
     shared_df = pd.DataFrame({
-        "OHSU": ohsu_2022_stats.loc[shared,"mean_diff"],
+        "OHSU 2022": ohsu_2022_stats.loc[shared,"mean_diff"],
+        "OHSU 2018": ohsu_2018_stats.loc[shared,"mean_diff"],
         "TCGA": tcga_stats.loc[shared,"mean_diff"],
         "TARGET": target_stats.loc[shared,"mean_diff"]
     })
-    purple_pink_blue = sns.color_palette(["#D6C20C", "#ce3581", "#EC7608"])
+
+    # Compute Mann-Whitney U tests separately for shared genes
+    mannwhitney_rows = []
+    for gene in shared_df.index:
+        fav_values = ohsu_2022.loc[ohsu_2022_labels == 1, gene].dropna()
+        nonfav_values = ohsu_2022.loc[ohsu_2022_labels == 0, gene].dropna()
+        if len(fav_values) > 0 and len(nonfav_values) > 0:
+            u_stat, p_val = mannwhitneyu(fav_values, nonfav_values, alternative="two-sided")
+        else:
+            u_stat, p_val = np.nan, np.nan
+        mannwhitney_rows.append({
+            "gene": gene,
+            "U_statistic": u_stat,
+            "p_value": p_val
+        })
+
+    mannwhitney_df = pd.DataFrame(mannwhitney_rows)
+    mannwhitney_df.to_csv(
+        os.path.join(OUTDIR, "shared_genes_mannwhitney_results.csv"),
+        index=False
+    )
+
+    # Plot only the mean_diff values
+    # Sort genes by average expression difference (descending) for ordering
+    shared_df['avg_diff'] = shared_df.mean(axis=1)
+    shared_df = shared_df.sort_values('avg_diff', ascending=False).drop(columns='avg_diff')
+
+    purple_pink_blue = sns.color_palette(["#D6C20C", "#ce3581", "#EC7608", "#1f77b4"])
     shared_df.plot(
         kind="bar",
         figsize=(8,6),
         color=purple_pink_blue
     )
 
-    plt.ylabel("Expression difference")
+    plt.ylabel("Expression difference Fav − Non-fav (Log2FC)")
     plt.xlabel("Gene")
 
     plt.title("Genes shared across AML cohorts", pad=12)
@@ -417,9 +458,9 @@ print("Gene comparison figures saved.")
 
 
 
-# ==========================================================
+
 # 5. FUSION SUBTYPE HEATMAP (OHSU)
-# ==========================================================
+
 
 print("\nGenerating fusion subtype heatmap...")
 
@@ -489,24 +530,36 @@ print("\nFusion counts:")
 print(labels.value_counts())
 
 # ----------------------------------------------------------
-# Load top genes
+# Load top genes (with error handling for missing files)
 # ----------------------------------------------------------
 
-ohsu_genes = pd.read_csv(
-    os.path.join(parent_dir, "results", "OHSU_top_genes.csv")
-)["gene"]
+try:
+    ohsu_genes = pd.read_csv(
+        os.path.join(parent_dir, "results", "OHSU_top_genes.csv")
+    )["gene"].head(50).tolist()
+except FileNotFoundError:
+    print("Warning: OHSU_top_genes.csv not found. Skipping fusion heatmap generation or using fallback genes from heatmap_df.")
+    ohsu_genes = top_heatmap_genes[:50] if 'top_heatmap_genes' in locals() else []
 
-tcga_genes = pd.read_csv(
-    os.path.join(parent_dir, "results", "TCGA_top_genes.csv")
-)["gene"]
+try:
+    tcga_genes = pd.read_csv(
+        os.path.join(parent_dir, "results", "TCGA_top_genes.csv")
+    )["gene"].head(50).tolist()
+except FileNotFoundError:
+    print("Warning: TCGA_top_genes.csv not found. Using OHSU genes as fallback for TCGA genes in fusion heatmap.")
+    tcga_genes = ohsu_genes.copy() if ohsu_genes else []
 
-target_genes = pd.read_csv(
-    os.path.join(parent_dir, "results", "TARGET_top_genes.csv")
-)["gene"]
+try:
+    target_genes = pd.read_csv(
+        os.path.join(parent_dir, "results", "TARGET_top_genes.csv")
+    )["gene"].head(50).tolist()
+except FileNotFoundError:
+    print("Warning: TARGET_top_genes.csv not found. Using OHSU genes as fallback for TARGET genes in fusion heatmap.")
+    target_genes = ohsu_genes.copy() if ohsu_genes else []
 
-ohsu_genes = set(ohsu_genes.head(50))
-tcga_genes = set(tcga_genes.head(50))
-target_genes = set(target_genes.head(50))
+ohsu_genes = set(ohsu_genes) if ohsu_genes else set()
+tcga_genes = set(tcga_genes) if tcga_genes else set(ohsu_genes)  # fallback to ohsu if empty
+target_genes = set(target_genes) if target_genes else set(ohsu_genes)  # fallback to ohsu if empty
 
 shared_genes = list(ohsu_genes & tcga_genes & target_genes)
 
@@ -515,9 +568,9 @@ if len(shared_genes) < 10:
 
 print("Genes used:", len(shared_genes))
 
-# ==========================================================
+
 # FUSION TRANSCRIPTIONAL PROGRAM HEATMAP (IMPROVED)
-# ==========================================================
+
 
 print("Generating fusion transcriptional program heatmap...")
 
@@ -550,10 +603,10 @@ sns.heatmap(
     center=0,
     linewidths=0.5,
     linecolor="lightgrey",
-    cbar_kws={"label":"Z-scored expression"}
+    cbar_kws={"label":"Relative expression (z-score, SD units)"}
 )
 
-plt.title("Distinct transcriptional programs driven by AML fusion subtypes")
+plt.title("Fusion subtype–specific transcriptional programs in AML")
 
 plt.xlabel("Fusion subtype")
 plt.ylabel("Gene")
@@ -567,9 +620,9 @@ plt.close()
 
 print("Fusion program heatmap saved.")
 
-# ==========================================================
+
 # FUSION FREQUENCY ACROSS DATASETS
-# ==========================================================
+
 
 print("Generating fusion frequency figure...")
 
@@ -577,25 +630,34 @@ print("Generating fusion frequency figure...")
 ohsu_counts = labels.value_counts()
 
 # OHSU 2018 VALIDATA predicted fusions
-validata_fusion = pd.read_csv(
-    os.path.join(parent_dir,"results","fusion_inference","VALIDATA_fusion_inference.csv")
-)
-
-validata_counts = validata_fusion["Predicted_fusion_program"].value_counts()
+try:
+    validata_fusion = pd.read_csv(
+        os.path.join(parent_dir,"results","fusion_inference","VALIDATA_fusion_inference.csv")
+    )
+    validata_counts = validata_fusion["Predicted_fusion_program"].value_counts()
+except FileNotFoundError:
+    print("Warning: VALIDATA_fusion_inference.csv not found. Skipping VALIDATA in fusion frequency plot.")
+    validata_counts = pd.Series(dtype=int)
 
 # TCGA predicted fusions
-tcga_fusion = pd.read_csv(
-    os.path.join(parent_dir,"results","fusion_inference","TCGA_fusion_inference.csv")
-)
-
-tcga_counts = tcga_fusion["Predicted_fusion_program"].value_counts()
+try:
+    tcga_fusion = pd.read_csv(
+        os.path.join(parent_dir,"results","fusion_inference","TCGA_fusion_inference.csv")
+    )
+    tcga_counts = tcga_fusion["Predicted_fusion_program"].value_counts()
+except FileNotFoundError:
+    print("Warning: TCGA_fusion_inference.csv not found. Skipping TCGA in fusion frequency plot.")
+    tcga_counts = pd.Series(dtype=int)
 
 # TARGET predicted fusions
-target_fusion = pd.read_csv(
-    os.path.join(parent_dir,"results","fusion_inference","TARGET_fusion_inference.csv")
-)
-
-target_counts = target_fusion["Predicted_fusion_program"].value_counts()
+try:
+    target_fusion = pd.read_csv(
+        os.path.join(parent_dir,"results","fusion_inference","TARGET_fusion_inference.csv")
+    )
+    target_counts = target_fusion["Predicted_fusion_program"].value_counts()
+except FileNotFoundError:
+    print("Warning: TARGET_fusion_inference.csv not found. Skipping TARGET in fusion frequency plot.")
+    target_counts = pd.Series(dtype=int)
 
 # ----------------------------------------------------------
 # Combine counts
